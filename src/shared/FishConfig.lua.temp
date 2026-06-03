@@ -1,0 +1,97 @@
+local FishConfig = {}
+
+FishConfig.TestPhaseEnabled = true -- Parameter to enable/disable TestPhase buff on join
+
+FishConfig.Rarities = {
+	Common = { Color = Color3.fromRGB(200, 200, 200) },
+	Rare = { Color = Color3.fromRGB(100, 200, 255) },
+	Epic = { Color = Color3.fromRGB(200, 0, 255) },
+	Legendary = { Color = Color3.fromRGB(255, 0, 0) },
+	Mythic = { Color = Color3.fromRGB(0, 255, 255) },
+	Special = { Color = Color3.fromRGB(255, 215, 0) }, -- Gold
+}
+
+
+
+-- ==================== ABILITIES REGISTRY ====================
+-- Define all abilities here once, then assign to fish by name
+FishConfig.Abilities = {
+	["Tropical Gust"] = {
+		EnergyPerHarvest = { Min = 0.5, Max = 8 },
+		EnergyRequired = 30,
+		BuffRange = 25, -- Range to receive Focus buff
+		Duration = 4,
+		TickRate = .75,
+		Buffs = {"Focus", "Speed", "GreenAlgaeBoost"},
+		Description = "Spawns a gust of wind that applies Focus & Speed buffs. (+3% Crit Chance & +10% Move Speed per stack, max 10x)."
+	},
+	["Obsession"] = {
+		EnergyPerHarvest = { Min = 0.5, Max = 7.5 },
+		EnergyRequired = 20,
+		Radius = 12,
+		Amount = 2,
+		Buffs = {"PinkAlgaeBoost"},
+		Description = "Jumps and pulses the air with a lovestruck hue. 50% Pink Algae Boost"
+	},
+	["Infectious Hellfire"] = {
+		EnergyPerHarvest = { Min = 1, Max = 10 },
+		EnergyRequired = 40,
+		Radius = 10,
+		InitialDuration = 8,
+		MinDuration = 0.25,
+		SpreadDelay = 1,
+		SpreadProb = 1.0,
+		DecayRate = 0.6,
+		GlobalMultiplier = 1.5,
+		SpecificMultipliers = { GreenAlgae = 2.5 },
+		Description = "Infects algae with a hellish plague. When an algae block is infected, algae production from said block will multiply by 1.5. However, if the algae block is green, it will multiply the algae production of said block by 2.5, rather than 1.5."
+	},
+	["Pinned Down"] = {
+		EnergyPerHarvest = { Min = 0.5, Max = 6.5 },
+		EnergyRequired = 25,
+		Duration = 15,
+		TweenHeight = -2,
+		AlgaeBoostAmount = 0.15,
+		Description = "Spawns a pin that grants 15% algae boost, plus 2.5% tool speed boost. Multiple pins stack, even with multiple people!"
+	},
+	["Bloodthirst"] = {
+		Duration = 9,
+		Radius = 4,
+		MoveSpeed = 40,
+		HarvestAmount = 3,
+		TickRate = 0.1,
+		HitCheckInterval = 0.1,
+		RicochetAngleVariance = 45,
+		MaxBounces = 15,
+		Description = "Fires a slash that bounces from fish to fish collecting algae everywhere it goes."
+	},
+	["Dive"] = {
+		EnergyPerHarvest = { Min = 0.5, Max = 4.5 },
+		EnergyRequired = 10,
+		Radius = 3,
+		Amount = 13,
+		Description = "Dives and harvests 13 capacity from all blocks in a 3-stud radius."
+	},
+	["Solar Flare"] = {
+		EnergyPerHarvest = { Min = 1, Max = 8 },
+		EnergyRequired = 25,
+		Duration = 10,
+		RefillRadius = 10,
+		RefillAmount = 8,
+		RefillRate = .25,
+		Buffs = {"OrangeAlgaeBoost"},
+		Description = "Summons a sun that refills algae around it and grants an Orange Algae Boost for every tick you are within its radius."
+	},
+	["Chromatic Blast"] = {
+		EnergyPerHarvest = { Min = 2, Max = 12 },
+		EnergyRequired = 18,
+		Radius = 15,
+		Count = 3,
+		Description = "Spawns a rhythm minigame that requries you to press the buttons that spawn around your screen according to when the ring around it shrinks. Pressing the button when the ring matches the size of the button will grant a stack of Rhythm Fever, boosting ALL algae by 3%. Perfects grant 5 stacks, Goods grant 3 staccks, and Bads grant 1 stack. When missing a button, your stack of Rhythm Fever decreases by a factor of 80%."
+	},
+	["Duplication"] = {
+		EnergyPerHarvest = { Min = 1, Max = 15 },
+		EnergyRequired = 150,
+		Description = "Duplicates a random ability from another fish in your aquarium. If no other fish are present, it performs Dive. Algae is multiplied by 1.1x per fish in your aquarium."
+	},
+}
