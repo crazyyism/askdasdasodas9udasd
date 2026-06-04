@@ -41,6 +41,11 @@ local MusicController = require(script.MusicController)
 local ConsoleController = require(script.ConsoleController)
 local CannonController = require(script.CannonController)
 
+local LoadingController = require(script.LoadingController)
+
+-- Start Loading screen first!
+LoadingController.Start()
+
 HUDController.Start()
 VisualController.Start()
 FishController.Start()
