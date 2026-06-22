@@ -37,6 +37,13 @@ if not FinishQuest then
 	FinishQuest.Parent = Remotes
 end
 
+local UpgradeAquarium = Remotes:FindFirstChild("UpgradeAquarium")
+if not UpgradeAquarium then
+	UpgradeAquarium = Instance.new("RemoteFunction")
+	UpgradeAquarium.Name = "UpgradeAquarium"
+	UpgradeAquarium.Parent = Remotes
+end
+
 local AquariumState = {} -- [AquariumModel] = Player or nil
 local PlayerAquarium = {} -- [Player] = AquariumModel
 
@@ -107,6 +114,54 @@ function AquariumService.Start()
 		end
 		
 		return true
+	end
+
+	UpgradeAquarium.OnServerInvoke = function(player, aquariumModel)
+		if not SecurityService.ValidateRemoteCall(player, "UpgradeAquarium") then return false, "Security Check Failed" end
+		
+		if PlayerAquarium[player] ~= aquariumModel then
+			return false, "You do not own this aquarium!"
+		end
+		
+		local PlayerData = require(script.Parent.PlayerData)
+		local success, msg = false, "Unknown Error"
+		
+		PlayerData.update(player, function(data)
+			local currentLevel = data.AquariumLevel or 0
+			local cost = 2500 * math.pow(2, currentLevel)
+			
+			if (data.Biomass or 0) < cost then
+				msg = "Not enough Biomass! Need " .. cost
+				return nil
+			end
+			
+			-- Deduct Biomass and upgrade
+			data.Biomass = data.Biomass - cost
+			data.AquariumLevel = currentLevel + 1
+			
+			-- Update leaderstats
+			local leaderstats = player:FindFirstChild("leaderstats")
+			if leaderstats then
+				local bioStat = leaderstats:FindFirstChild("Biomass")
+				if bioStat then bioStat.Value = data.Biomass end
+			end
+			
+			-- Recalculate stats applies the new AquariumMultiplier
+			PlayerData.RecalculateStats(data)
+			
+			success = true
+			msg = data.AquariumLevel
+			return data
+		end)
+		
+		if success then
+			local NotificationEvent = Remotes:FindFirstChild("NotificationEvent")
+			if NotificationEvent then
+				NotificationEvent:FireClient(player, "Aquarium Upgraded to Level " .. msg .. "!", Color3.fromRGB(50, 255, 50))
+			end
+			return true, msg
+		end
+		return false, msg
 	end
 
 	StartQuest.OnServerEvent:Connect(function(player, questId)
@@ -429,8 +484,9 @@ function AquariumService.Start()
 		
 		local success, msg = false, "Unknown Error"
 		local newFish = nil
+		local finalConsumedCount = 1
 		
-			-- 2. Transaction
+		-- 2. Transaction
 		PlayerData.update(player, function(data)
 			-- Validate egg config FIRST (before consuming anything)
 			local eggCfg = EquipmentConfig.Eggs[eggName]
@@ -450,13 +506,34 @@ function AquariumService.Start()
 			-- Validate Slot Usage
 			local slotOccupied = (data.FishSchool[tostring(slotId)] ~= nil)
 			
+			if eggCfg.IsEviction then
+				if not slotOccupied then
+					msg = "This slot is already empty!"
+					return nil
+				end
+				
+				data.Inventory[eggName] = data.Inventory[eggName] - 1
+				if data.Inventory[eggName] <= 0 then data.Inventory[eggName] = nil end
+				
+				data._InventoryDirty = true
+				
+				data.FishSchool[tostring(slotId)] = nil
+				data._FishDirty = true
+				
+				success = true
+				return data
+			end
+			
 			if eggCfg.IsFeed then
 				if not slotOccupied then
 					msg = "This slot is empty! You can only feed existing fish."
 					return nil
 				end
 				
-				feedAmount = math.max(1, tonumber(feedAmount) or 1)
+				local rawFeed = tonumber(feedAmount) or 1
+				if rawFeed ~= rawFeed then rawFeed = 1 end -- NaN check
+				feedAmount = math.floor(math.clamp(rawFeed, 1, availableCount))
+				
 				if feedAmount > availableCount then
 					msg = "Not enough feed in inventory!"
 					return nil
@@ -476,120 +553,226 @@ function AquariumService.Start()
 				return data
 			end
 			
-			-- Standard Use (Egg / Zooplankton)
-			if eggName ~= "Rhythm Egg" then
-				if data.Inventory[eggName] and data.Inventory[eggName] > 0 then
-					data.Inventory[eggName] = data.Inventory[eggName] - 1
-					if data.Inventory[eggName] <= 0 then data.Inventory[eggName] = nil end
-					data._InventoryDirty = true
-				end
-			end
+			local isHatchable = eggCfg.Rarities ~= nil and not eggCfg.IsFeed and eggName ~= "Rhythm Egg"
 			
-			if eggCfg.RequiresFish then
-				-- Must overlap (Bait logic)
-				if not slotOccupied then
-					msg = "This item requires an existing fish to use!"
-					return nil
+			if isHatchable then
+				local targetRarities = {}
+				if data.Settings and data.Settings.UntilMythic then
+					targetRarities["Mythic"] = true
+				elseif data.Settings and data.Settings.UntilLegendary then
+					targetRarities["Legendary"] = true
+					targetRarities["Mythic"] = true
 				end
-			end
-			
-			-- Uniqueness Check for Rhythm Fish
-			if eggName == "Rhythm Egg" then
-				for _, fish in pairs(data.FishSchool) do
-					if fish.Id == "Rhythm Fish" then
-						msg = "You already have a Rhythm Fish! (Unique)"
+				
+				if eggCfg.RequiresFish then
+					if not slotOccupied then
+						msg = "This item requires an existing fish to use!"
 						return nil
 					end
 				end
-			end
-			
-			-- Rarity Roll (Robust Weighted Random)
-			local chosenRarity = "Common"
-			local priorities = {"Mythic", "Legendary", "Epic", "Rare", "Common"}
-			
-			-- Calculate Total Weight (Should be 100, but let's be safe for custom eggs)
-			local totalWeight = 0
-			for _, rarity in ipairs(priorities) do
-				totalWeight = totalWeight + (eggCfg.Rarities[rarity] or 0)
-			end
-			
-			if totalWeight <= 0 then
-				warn("[LuckSystem] Egg " .. eggName .. " has 0 total weight! Defaulting to Common.")
-				chosenRarity = "Common"
-			else
-				local roll = rng:NextNumber(0, totalWeight)
-				local currentSum = 0
 				
-				chosenRarity = nil
-				for _, rarity in ipairs(priorities) do
-					local weight = eggCfg.Rarities[rarity] or 0
-					if weight <= 0 then continue end
+				local consumedCount = 0
+				local lastRolledFish = nil
+				local rollAgain = true
+				
+				while rollAgain do
+					local currentCount = (data.Inventory and data.Inventory[eggName]) or 0
+					if currentCount <= 0 then
+						break
+					end
 					
-					currentSum = currentSum + weight
-					if roll <= currentSum then
-						chosenRarity = rarity
-						break
+					data.Inventory[eggName] = data.Inventory[eggName] - 1
+					if data.Inventory[eggName] <= 0 then data.Inventory[eggName] = nil end
+					data._InventoryDirty = true
+					consumedCount = consumedCount + 1
+					
+					-- Rarity Roll
+					local chosenRarity = "Common"
+					local priorities = {"Mythic", "Legendary", "Epic", "Rare", "Common"}
+					local totalWeight = 0
+					for _, rarity in ipairs(priorities) do
+						totalWeight = totalWeight + (eggCfg.Rarities[rarity] or 0)
+					end
+					
+					if totalWeight > 0 then
+						local roll = rng:NextNumber(0, totalWeight)
+						local currentSum = 0
+						chosenRarity = nil
+						for _, rarity in ipairs(priorities) do
+							local weight = eggCfg.Rarities[rarity] or 0
+							if weight <= 0 then continue end
+							
+							currentSum = currentSum + weight
+							if roll <= currentSum then
+								chosenRarity = rarity
+								break
+							end
+						end
+						if not chosenRarity then chosenRarity = "Common" end
+					end
+					
+					if chosenRarity == "Common" and (eggCfg.Rarities.Common or 0) == 0 then
+						for _, r in ipairs(priorities) do
+							if (eggCfg.Rarities[r] or 0) > 0 then
+								chosenRarity = r
+								break
+							end
+						end
+					end
+					
+					-- Pick Fish ID
+					local candidates = {}
+					for id, fish in pairs(FishConfig.Fish) do
+						if id ~= "Rhythm Fish" and fish.Rarity == chosenRarity then
+							table.insert(candidates, id)
+						end
+					end
+					if #candidates == 0 then
+						chosenRarity = "Common"
+						for id, fish in pairs(FishConfig.Fish) do
+							if fish.Rarity == "Common" then
+								table.insert(candidates, id)
+							end
+						end
+					end
+					
+					local fishId = candidates[rng:NextInteger(1, #candidates)]
+					if not fishId then fishId = "Basic Fish" end
+					local fishCfg = FishConfig.Fish[fishId]
+					
+					if not data.UnlockedFishes then data.UnlockedFishes = {} end
+					local isNew = not data.UnlockedFishes[fishId]
+					if isNew then
+						data.UnlockedFishes[fishId] = true
+					end
+					
+					local oldFish = data.FishSchool[tostring(slotId)]
+					lastRolledFish = {
+						Id = fishId,
+						Name = fishCfg.Name,
+						Level = oldFish and oldFish.Level or 1,
+						Exp = oldFish and oldFish.Exp or 0,
+						Rarity = chosenRarity,
+						IsNew = isNew,
+						UniqueId = game:GetService("HttpService"):GenerateGUID(false)
+					}
+					
+					data.FishSchool[tostring(slotId)] = lastRolledFish
+					
+					if next(targetRarities) == nil or targetRarities[chosenRarity] then
+						rollAgain = false
 					end
 				end
 				
-				if not chosenRarity then chosenRarity = "Common" end
-			end
-			
-			-- Final Safety: If for some reason we missed all (Precision or Missing Priorities)
-			if chosenRarity == "Common" and (eggCfg.Rarities.Common or 0) == 0 then
-				-- Fallback to the first available rarity with weight > 0
-				for _, r in ipairs(priorities) do
-					if (eggCfg.Rarities[r] or 0) > 0 then
-						chosenRarity = r
-						break
-					end
-				end
-			end
-			
-			-- Pick Fish ID
-			local candidates = {}
-			if eggName == "Rhythm Egg" then
-				table.insert(candidates, "Rhythm Fish") -- Force Rhythm Fish
-				chosenRarity = "Legendary"
+				newFish = lastRolledFish
+				finalConsumedCount = consumedCount
+				data._FishDirty = true
+				data._QuestsDirty = true
 			else
-				for id, fish in pairs(FishConfig.Fish) do
-					if id ~= "Rhythm Fish" and fish.Rarity == chosenRarity then
-						table.insert(candidates, id)
+				-- Standard non-loop behavior (Rhythm Egg)
+				if eggName ~= "Rhythm Egg" then
+					if data.Inventory[eggName] and data.Inventory[eggName] > 0 then
+						data.Inventory[eggName] = data.Inventory[eggName] - 1
+						if data.Inventory[eggName] <= 0 then data.Inventory[eggName] = nil end
+						data._InventoryDirty = true
 					end
 				end
+				
+				if eggCfg.RequiresFish then
+					if not slotOccupied then
+						msg = "This item requires an existing fish to use!"
+						return nil
+					end
+				end
+				
+				if eggName == "Rhythm Egg" then
+					for _, fish in pairs(data.FishSchool) do
+						if fish.Id == "Rhythm Fish" then
+							msg = "You already have a Rhythm Fish! (Unique)"
+							return nil
+						end
+					end
+				end
+				
+				local chosenRarity = "Common"
+				local priorities = {"Mythic", "Legendary", "Epic", "Rare", "Common"}
+				local totalWeight = 0
+				for _, rarity in ipairs(priorities) do
+					totalWeight = totalWeight + (eggCfg.Rarities[rarity] or 0)
+				end
+				
+				if totalWeight > 0 then
+					local roll = rng:NextNumber(0, totalWeight)
+					local currentSum = 0
+					chosenRarity = nil
+					for _, rarity in ipairs(priorities) do
+						local weight = eggCfg.Rarities[rarity] or 0
+						if weight <= 0 then continue end
+						
+						currentSum = currentSum + weight
+						if roll <= currentSum then
+							chosenRarity = rarity
+							break
+						end
+					end
+					if not chosenRarity then chosenRarity = "Common" end
+				end
+				
+				if chosenRarity == "Common" and (eggCfg.Rarities.Common or 0) == 0 then
+					for _, r in ipairs(priorities) do
+						if (eggCfg.Rarities[r] or 0) > 0 then
+							chosenRarity = r
+							break
+						end
+					end
+				end
+				
+				local candidates = {}
+				if eggName == "Rhythm Egg" then
+					table.insert(candidates, "Rhythm Fish")
+					chosenRarity = "Legendary"
+				else
+					for id, fish in pairs(FishConfig.Fish) do
+						if id ~= "Rhythm Fish" and fish.Rarity == chosenRarity then
+							table.insert(candidates, id)
+						end
+					end
+				end
+				
+				if #candidates == 0 then
+					chosenRarity = "Common"
+					for id, fish in pairs(FishConfig.Fish) do
+						if fish.Rarity == "Common" then
+							table.insert(candidates, id)
+						end
+					end
+				end
+				
+				local fishId = candidates[rng:NextInteger(1, #candidates)]
+				if not fishId then fishId = "Basic Fish" end
+				local fishCfg = FishConfig.Fish[fishId]
+				
+				if not data.UnlockedFishes then data.UnlockedFishes = {} end
+				local isNew = not data.UnlockedFishes[fishId]
+				if isNew then
+					data.UnlockedFishes[fishId] = true
+				end
+				
+				local oldFish = data.FishSchool[tostring(slotId)]
+				newFish = {
+					Id = fishId,
+					Name = fishCfg.Name,
+					Level = oldFish and oldFish.Level or 1,
+					Exp = oldFish and oldFish.Exp or 0,
+					Rarity = chosenRarity,
+					IsNew = isNew,
+					UniqueId = game:GetService("HttpService"):GenerateGUID(false)
+				}
+				data.FishSchool[tostring(slotId)] = newFish
+				data._FishDirty = true
+				data._QuestsDirty = true
+				finalConsumedCount = 1
 			end
-			
-			if #candidates == 0 then 
-				chosenRarity = "Common"
-				for id, fish in pairs(FishConfig.Fish) do if fish.Rarity == "Common" then table.insert(candidates, id) end end
-			end
-			
-			local fishId = candidates[rng:NextInteger(1, #candidates)]
-			if not fishId then fishId = "Basic Fish" end
-			
-			local fishCfg = FishConfig.Fish[fishId]
-			
-			-- Check Unlocked Status
-			if not data.UnlockedFishes then data.UnlockedFishes = {} end
-			local isNew = not data.UnlockedFishes[fishId]
-			if isNew then
-				data.UnlockedFishes[fishId] = true
-			end
-			
-			-- Add Fish to Slot
-			local oldFish = data.FishSchool[tostring(slotId)]
-			newFish = {
-				Id = fishId,
-				Name = fishCfg.Name,
-				Level = oldFish and oldFish.Level or 1,
-				Exp = oldFish and oldFish.Exp or 0,
-				Rarity = chosenRarity,
-				IsNew = isNew,
-				UniqueId = game:GetService("HttpService"):GenerateGUID(false)
-			}
-			data.FishSchool[tostring(slotId)] = newFish
-			data._FishDirty = true -- Flag for replication
-			data._QuestsDirty = true -- Make sure FishRequired quests instantly refresh!
 			
 			-- Update Visuals on Server
 			local slotsContainer = aquariumModel:FindFirstChild("Slots") or aquariumModel:FindFirstChild("FishSlot") or aquariumModel
@@ -607,14 +790,24 @@ function AquariumService.Start()
 				end
 			end
 			
-			-- Fallback for first slot
 			if not slotInstance and (idStr == "1" or idStr == "0") then
 				slotInstance = slotsContainer:FindFirstChild("FishSlot")
 			end
 
 			if slotInstance then
-				-- print("ProcessEggDrop: Found slotInstance for visual update")
-				AquariumService.UpdateSlotVisuals(slotInstance, newFish)
+				if newFish then
+					AquariumService.UpdateSlotVisuals(slotInstance, newFish)
+				else
+					local facePart = slotInstance:FindFirstChild("FishFace") or slotInstance:FindFirstChildWhichIsA("BasePart")
+					if facePart then
+						for _, d in ipairs(facePart:GetChildren()) do
+							if d:IsA("Decal") then d.Texture = "" end
+						end
+						if facePart:IsA("BasePart") then
+							facePart.Color = Color3.fromRGB(163, 162, 165)
+						end
+					end
+				end
 			end
 			
 			success = true
@@ -622,7 +815,7 @@ function AquariumService.Start()
 		end)
 		
 		if success then
-			return true, newFish
+			return true, newFish, finalConsumedCount
 		else
 			return false, msg
 		end
@@ -654,51 +847,112 @@ function AquariumService.Start()
 				return nil
 			end
 			
-			if itemName == "Sea Mine" then
-				local character = player.Character
-				local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-				if not rootPart then
-					msg = "Character not found"
-					return nil
-				end
+			local character = player.Character
+			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			if not rootPart then
+				msg = "Character not found"
+				return nil
+			end
 
-				-- Check if player is standing on a reef
-				local rayParams = RaycastParams.new()
-				rayParams.FilterType = Enum.RaycastFilterType.Exclude
-				rayParams.FilterDescendantsInstances = {character}
-				local result = workspace:Raycast(rootPart.Position, Vector3.new(0, -20, 0), rayParams)
-				
-				local reefName = nil
-				if result and result.Instance then
-					local current = result.Instance
-					local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
-					while current and current ~= workspace do
-						if ResourceConfig.Fields[current.Name] then
-							reefName = current.Name
-							break
+			local function GetClosestReef(pos)
+				local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
+				local closest = nil
+				local minD = math.huge
+				for rName, _ in pairs(ResourceConfig.Fields) do
+					local f = workspace:FindFirstChild(rName)
+					if f then
+						for _, child in ipairs(f:GetChildren()) do
+							if child:IsA("BasePart") then
+								local dist = (child.Position - pos).Magnitude
+								if dist < minD then
+									minD = dist
+									closest = rName
+								end
+							end
 						end
-						current = current.Parent
 					end
 				end
+				return minD <= 50 and closest or nil
+			end
 
+			local reefName = nil
+			if itemName == "Sea Mine" or itemName == "Fertilizer" then
+				reefName = GetClosestReef(rootPart.Position)
 				if not reefName then
-					msg = "You must be standing on a Reef to spawn a Sea Mine!"
-					-- Send a notification back to the player if they fail
+					msg = "You must be standing near a Reef to use this!"
 					local NotificationEvent = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("NotificationEvent")
 					if NotificationEvent then
 						NotificationEvent:FireClient(player, msg, Color3.fromRGB(255, 100, 100))
 					end
 					return nil
 				end
+			end
 
+			if itemName == "Convertrix" then
+				if not data.Plankton then
+					msg = "You have no algae to convert!"
+					return nil
+				end
+				
+				local totalAlgae = 0
+				for _, amt in pairs(data.Plankton) do totalAlgae += amt end
+				if totalAlgae <= 0 then
+					msg = "You have no algae to convert!"
+					return nil
+				end
+				
+				data.Inventory[itemName] = data.Inventory[itemName] - 1
+				if data.Inventory[itemName] <= 0 then data.Inventory[itemName] = nil end
+				data._InventoryDirty = true
+				
+				-- Convert all algae
+				local convertMult = data.Stats and data.Stats.ConvertMultiplier or 1
+				local critChance = (data.Stats and data.Stats.CriticalChance or 0.01) + (data.Stats and data.Stats.CritChanceBonus or 0)
+				local isCrit = false
+				if math.random() < critChance then isCrit = true end
+				
+				local yieldMult = 1.0
+				if isCrit then
+					local baseCritPower = data.Stats and data.Stats.CriticalPower or 3.0
+					local critPowerBonus = 1 + (data.Stats and data.Stats.CritPowerBonus or 0)
+					yieldMult = baseCritPower * critPowerBonus
+				end
+				
+				local gained = 0
+				local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
+				
+				local EquipmentConfig = require(game:GetService("ReplicatedStorage").Shared.EquipmentConfig)
+				local cfg = EquipmentConfig[itemName] or (EquipmentConfig.Eggs and EquipmentConfig.Eggs[itemName])
+				local baseYieldMult = cfg and cfg.BaseYieldMultiplier or 1.0
+				
+				for typeName, amt in pairs(data.Plankton) do
+					if amt > 0 then
+						local resType = ResourceConfig.Types[typeName]
+						local resBaseValue = resType and resType.BaseValue or 1
+						gained += (amt * resBaseValue * (data.Stats and data.Stats.BiomassPerAlgae or 1.0) * yieldMult * convertMult * baseYieldMult)
+					end
+				end
+				
+				data.Plankton = {} -- Clear all algae
+				data.Biomass = (data.Biomass or 0) + gained
+				data.LifetimeBiomass = (data.LifetimeBiomass or 0) + gained
+				
+				local NotificationEvent = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("NotificationEvent")
+				if NotificationEvent then
+					local critMsg = isCrit and " (CRITICAL!)" or ""
+					NotificationEvent:FireClient(player, "Used Convertrix! Converted all algae into " .. tostring(math.floor(gained)) .. " Biomass!" .. critMsg, Color3.fromRGB(0, 255, 150))
+				end
+				
+				success = true
+			elseif itemName == "Sea Mine" then
 				-- Consume Item
 				data.Inventory[itemName] = data.Inventory[itemName] - 1
 				if data.Inventory[itemName] <= 0 then data.Inventory[itemName] = nil end
 				data._InventoryDirty = true
 
-				-- Spawn Mine
+				-- Spawn Mine (Use rootPart pos but a bit higher)
 				local SeaMineService = require(script.Parent.SeaMineService)
-				local spawnPos = result.Position + Vector3.new(0, 15, 0)
+				local spawnPos = rootPart.Position + Vector3.new(0, 15, 0)
 				SeaMineService.SpawnMineUser(player, spawnPos, reefName)
 				
 				success = true
@@ -708,29 +962,111 @@ function AquariumService.Start()
 				if data.Inventory[itemName] <= 0 then data.Inventory[itemName] = nil end
 				data._InventoryDirty = true
 				
-				if not data.Stats then data.Stats = {} end
-				data.Stats.FertilizerEnd = os.time() + 600 -- 10 Minutes
+				local EquipmentConfig = require(game:GetService("ReplicatedStorage").Shared.EquipmentConfig)
+				local cfg = EquipmentConfig[itemName] or (EquipmentConfig.Eggs and EquipmentConfig.Eggs[itemName])
+				local duration = cfg and cfg.Duration or 600
+				local multiplier = cfg and cfg.Multiplier or 2.0
+				
+				if not data.ActiveReefBoosts then data.ActiveReefBoosts = {} end
+				data.ActiveReefBoosts[reefName] = {
+					ExpiresAt = os.time() + duration,
+					Multiplier = multiplier
+				}
 				
 				local NotificationEvent = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("NotificationEvent")
 				if NotificationEvent then
-					NotificationEvent:FireClient(player, "Used Fertilizer! +100% Algae for 10 Minutes!", Color3.fromRGB(50, 255, 50))
+					local boostPercent = (multiplier - 1) * 100
+					local mins = math.floor(duration / 60)
+					NotificationEvent:FireClient(player, "Used Fertilizer on " .. reefName .. "! +" .. boostPercent .. "% Algae for " .. mins .. " Minutes!", Color3.fromRGB(50, 255, 50))
 				end
 				
+				success = true
+			elseif itemName == "Orange Gem" or itemName == "Green Gem" or itemName == "Pink Gem" then
+				data.Inventory[itemName] = data.Inventory[itemName] - 1
+				if data.Inventory[itemName] <= 0 then data.Inventory[itemName] = nil end
+				data._InventoryDirty = true
+				
+				-- Store the buff to apply outside the transaction
+				data._PendingGemBuff = itemName .. "Boost"
+				
+				-- Notification happens here so it's guaranteed
+				local NotificationEvent = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("NotificationEvent")
+				if NotificationEvent then
+					NotificationEvent:FireClient(player, "Used " .. itemName .. "!", Color3.fromRGB(200, 200, 255))
+				end
 				success = true
 			end
 
 			return data
 		end)
+		
+		-- Apply the buff after the transaction is fully completed
+		if success then
+			local afterData = PlayerData.get(player)
+			if afterData and afterData._PendingGemBuff then
+				local buffName = afterData._PendingGemBuff
+				
+				local originalItemName = buffName:gsub("Boost", "")
+				local EquipmentConfig = require(game:GetService("ReplicatedStorage").Shared.EquipmentConfig)
+				local cfg = EquipmentConfig[originalItemName]
+				local customDuration = cfg and cfg.Duration
+				local customMultiplier = cfg and (cfg.Multiplier - 1.0)
+				
+				local AbilityService = require(script.Parent.AbilityService)
+				AbilityService.ApplyBuff(player, buffName:gsub(" ", ""), customDuration, customMultiplier)
+				
+				-- Clear pending buff
+				PlayerData.update(player, function(d)
+					d._PendingGemBuff = nil
+					return d
+				end, true)
+			end
+		end
 
 		return success, msg
 	end
 
 	
-	Players.PlayerRemoving:Connect(function(player)
+	function AquariumService.ReleaseAquarium(player)
 		local owned = PlayerAquarium[player]
+		
+		-- Fallback scanner: If player isn't mapped in PlayerAquarium, scan workspace for orphaned claims
+		if not owned and player then
+			local folder = workspace:FindFirstChild("Aquariums")
+			if folder then
+				for _, plot in ipairs(folder:GetChildren()) do
+					local isMatch = false
+					if plot:GetAttribute("OwnerUserId") == player.UserId then
+						isMatch = true
+					else
+						-- Also match by legacy text label to clear any desynced visual signs
+						local ownerPart = plot:FindFirstChild("Ownership")
+						local gui = ownerPart and ownerPart:FindFirstChild("SurfaceGui")
+						local lbl = gui and gui:FindFirstChild("TextLabel")
+						local expected = player.Name .. "'s Aquarium"
+						if lbl and lbl.Text == expected then
+							isMatch = true
+						end
+					end
+					
+					if isMatch then
+						owned = plot
+						break
+					end
+				end
+			end
+		end
+		
 		if owned then
 			AquariumState[owned] = nil
 			PlayerAquarium[player] = nil
+			if player then
+				for p, aq in pairs(PlayerAquarium) do
+					if p.UserId == player.UserId then
+						PlayerAquarium[p] = nil
+					end
+				end
+			end
 			owned:SetAttribute("OwnerUserId", 0)
 			
 			-- Reset Visuals (Clear Fish Slots)
@@ -771,7 +1107,9 @@ function AquariumService.Start()
 				respawnPoint:Destroy()
 			end
 		end
-	end)
+	end
+
+	Players.PlayerRemoving:Connect(AquariumService.ReleaseAquarium)
 end
 
 return AquariumService

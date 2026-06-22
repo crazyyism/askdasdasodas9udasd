@@ -41,6 +41,8 @@ local function UpdateUI(settingsFrame)
 		{Key = "HighlightFish", Name = "Highlight Fish"},
 		{Key = "HideOtherFish", Name = "Hide Other Fish"},
 		{Key = "DisableSFX", Name = "Disable SFX"},
+		{Key = "UntilLegendary", Name = "Until Legendary"},
+		{Key = "UntilMythic", Name = "Until Mythic"},
 	}
 	
 	for _, setting in ipairs(settingsList) do

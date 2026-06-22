@@ -43,6 +43,13 @@ RequestData.OnServerEvent:Connect(function(player)
 	end
 end)
 
+local CompleteTutorial = Remotes:FindFirstChild("CompleteTutorial")
+if not CompleteTutorial then
+	CompleteTutorial = Instance.new("RemoteEvent")
+	CompleteTutorial.Name = "CompleteTutorial"
+	CompleteTutorial.Parent = Remotes
+end
+
 -- Use native GlobalDataStore for production data persistence
 local DataStore = DataStoreService:GetDataStore("Fish_Hatchery")
 
@@ -61,6 +68,7 @@ local DEFAULT_DATA = {
 		MysticAlgae = 0,
 	},
 	EquippedBackpack = "Pouch",
+	AquariumLevel = 0,
 	MaxCapacity = 200, -- Will be synced with BackpackConfig
 	FishSchool = {
 		-- [SlotId] = {Id = "Basic Fish", ...}
@@ -123,7 +131,10 @@ local DEFAULT_DATA = {
 		HighlightFish = false,
 		HideOtherFish = false,
 		DisableSFX = false,
+		UntilLegendary = false,
+		UntilMythic = false,
 	},
+	TutorialCompleted = false,
 }
 
 local function DeepCopy(orig)
@@ -186,6 +197,17 @@ local function SanitizeData(data)
 			data.Inventory = newInv
 			data._InventoryDirty = true 
 		end
+		
+		-- Migrate Mythic Egg -> Heavensent Egg
+		local old1 = data.Inventory["mythic Egg"]
+		local old2 = data.Inventory["Mythic Egg"]
+		local toAdd = (old1 or 0) + (old2 or 0)
+		if toAdd > 0 then
+			data.Inventory["Heavensent Egg"] = (data.Inventory["Heavensent Egg"] or 0) + toAdd
+			data.Inventory["mythic Egg"] = nil
+			data.Inventory["Mythic Egg"] = nil
+			data._InventoryDirty = true
+		end
 	else
 		data.Inventory = {}
 	end
@@ -220,7 +242,16 @@ local function SanitizeData(data)
 end
 
 -- Helper for stat syncing (exposed for ShopService)
-function PlayerData.RecalculateStats(data)
+function PlayerData.RecalculateStats(data, player)
+	if not player then
+		-- Search SessionData by reference
+		for uId, sData in pairs(SessionData) do
+			if sData == data then
+				player = Players:GetPlayerByUserId(uId)
+				break
+			end
+		end
+	end
 	-- Reset Base Stats
 	if not data.Stats then data.Stats = {} end
 	data.Stats.CapacityMultiplier = 1.0
@@ -324,6 +355,24 @@ function PlayerData.RecalculateStats(data)
 		end
 	end
 	
+	-- Apply Aquarium Upgrades (1.5x exponential)
+	local aqBoost = 1.0
+	if data.AquariumLevel and data.AquariumLevel > 0 then
+		aqBoost = math.pow(1.5, data.AquariumLevel)
+		data.Stats.ConvertMultiplier = data.Stats.ConvertMultiplier * aqBoost
+	end
+	data.Stats.AquariumMultiplier = aqBoost
+	
+	-- Apply Roblox Premium (Roblox Plus) base 1.1x Convert Rate multiplier
+	if player and player.MembershipType == Enum.MembershipType.Premium then
+		data.Stats.ConvertMultiplier = data.Stats.ConvertMultiplier * 1.1
+	end
+	
+	-- Apply Roblox Premium (Roblox Plus) base 1.1x Move Speed multiplier
+	if player and player.MembershipType == Enum.MembershipType.Premium then
+		data.Stats.PlayerWalkSpeedMult = data.Stats.PlayerWalkSpeedMult * 1.1
+	end
+	
 	-- Final Capacity
 	data.MaxCapacity = math.floor((data.BaseCapacity or baseCap) * data.Stats.CapacityMultiplier)
 	
@@ -345,7 +394,7 @@ function PlayerData.start(player)
 
 	if isDeadDataStore then
 		SessionData[player.UserId] = DeepCopy(DEFAULT_DATA)
-		PlayerData.RecalculateStats(SessionData[player.UserId])
+		PlayerData.RecalculateStats(SessionData[player.UserId], player)
 		
 		if DataUpdateEvent then
 			DataUpdateEvent:FireClient(player, SessionData[player.UserId])
@@ -445,7 +494,7 @@ function PlayerData.start(player)
 		result = SanitizeData(result)
 		
 		-- Full Stat Recalculation (Backpack + Artifacts)
-		PlayerData.RecalculateStats(result)
+		PlayerData.RecalculateStats(result, player)
 		
 		SessionData[player.UserId] = result
 		
@@ -535,6 +584,17 @@ function PlayerData.start(player)
 				SessionData[player.UserId].Stats.ConvertMultiplier = 1.0 + (cfg.ConvertAdd / 100)
 			else
 				SessionData[player.UserId].Stats.ConvertMultiplier = 1.0
+			end
+			
+			-- Apply Roblox Premium (Roblox Plus) base 1.1x Convert Rate multiplier
+			if player and player.MembershipType == Enum.MembershipType.Premium then
+				SessionData[player.UserId].Stats.ConvertMultiplier = SessionData[player.UserId].Stats.ConvertMultiplier * 1.1
+			end
+			
+			-- Apply Roblox Premium (Roblox Plus) base 1.1x Move Speed multiplier
+			SessionData[player.UserId].Stats.PlayerWalkSpeedMult = SessionData[player.UserId].Stats.PlayerWalkSpeedMult or 1.0
+			if player and player.MembershipType == Enum.MembershipType.Premium then
+				SessionData[player.UserId].Stats.PlayerWalkSpeedMult = SessionData[player.UserId].Stats.PlayerWalkSpeedMult * 1.1
 			end
 			
 			-- Apply AlgaePercentAdd bonus
@@ -638,6 +698,49 @@ end
 
 
 local dirtyUsers = {}
+
+function PlayerData.Reset(player)
+	local cleanData = DeepCopy(DEFAULT_DATA)
+	SessionData[player.UserId] = cleanData
+	PlayerData.RecalculateStats(cleanData, player)
+	dirtyUsers[player.UserId] = true
+	
+	-- Force full sync to client
+	if DataUpdateEvent then
+		DataUpdateEvent:FireClient(player, cleanData)
+	end
+	
+	-- Reset leaderstats
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		local algae = leaderstats:FindFirstChild("Algae")
+		if algae then algae.Value = 0 end
+		local biomass = leaderstats:FindFirstChild("Biomass")
+		if biomass then biomass.Value = 0 end
+	end
+	
+	-- Reset WalkSpeed
+	if player.Character and player.Character:FindFirstChild("Humanoid") then
+		local base = cleanData.Stats.PlayerWalkSpeedMult or 1.0
+		local ability = cleanData.Stats.FishMoveSpeedMultiplier or 1.0
+		player.Character.Humanoid.WalkSpeed = 21 * base * ability
+	end
+	
+	-- Save immediately to prevent data issues
+	if not isDeadDataStore then
+		pcall(function()
+			DataStore:UpdateAsync("User_" .. player.UserId, function(stored)
+				if stored and stored._SessionLock and stored._SessionLock ~= game.JobId then
+					return nil
+				end
+				cleanData._SessionLock = game.JobId
+				cleanData._LastSaved = os.time()
+				return cleanData
+			end)
+		end)
+	end
+end
+
 
 -- Replication Loop (Throttled to ~10Hz)
 -- Replication Loop (Throttled to ~10Hz)
@@ -857,6 +960,13 @@ task.spawn(function()
 			end
 		end
 	end
+end)
+
+CompleteTutorial.OnServerEvent:Connect(function(player)
+	PlayerData.update(player, function(data)
+		data.TutorialCompleted = true
+		return data
+	end)
 end)
 
 return PlayerData

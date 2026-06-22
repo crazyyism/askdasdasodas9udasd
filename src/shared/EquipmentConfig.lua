@@ -52,7 +52,7 @@ local EquipmentConfig = {
 	},
 	["Pouch"] = {
 		Name = "Pouch",
-		Description = "The starter backpack, holds 250 algae.",
+		Description = "The starter backpack, holds 250 algae. Boosts Convert Rate by 0% and Algae by 0%.",
 		Price = 0,
 		Currency = "Biomass",
 		ProductType = "Backpack",
@@ -66,7 +66,7 @@ local EquipmentConfig = {
 	},
 	["Bucket"] = {
 		Name = "Bucket",
-		Description = "Holds more than a pouch. Boosts Convert Rate by 25%",
+		Description = "Holds more than a pouch. Boosts Convert Rate by 25% and Algae by 0%.",
 		Price = 2000, -- was 1,000 | pairs with Scissors (4k) — day 1-2
 		Currency = "Biomass",
 		ProductType = "Backpack",
@@ -80,7 +80,7 @@ local EquipmentConfig = {
 	},
 	["OxygenTank"] = {
 		Name = "Oxygen Tank",
-		Description = "A reliable tank to hold your needs. Boosts algae by 15% and Convert Rate by 50%",
+		Description = "A reliable tank to hold your needs. Boosts Convert Rate by 50% and Algae by 15%.",
 		Price = 8750, -- was 7,500 | pairs with Shovel (20k) — day 3-5
 		Currency = "Biomass",
 		ProductType = "Backpack",
@@ -94,7 +94,7 @@ local EquipmentConfig = {
 	},
 	["Aquarium"] = {
 		Name = "Aquarium",
-		Description = "An aquarium to hold algae, its like a mini home for ya fish Boosts algae by 25% and Convert Rate by 100%.",
+		Description = "An aquarium to hold algae, its like a mini home for ya fish. Boosts Convert Rate by 100% and Algae by 25%.",
 		Price = 25750, -- was 30,000 | pairs with FishingHook (75k) — week 1
 		Currency = "Biomass",
 		ProductType = "Backpack",
@@ -108,7 +108,7 @@ local EquipmentConfig = {
 	},
 	["Barrel"] = {
 		Name = "Barrel",
-		Description = "da big barrel of algae. Boosts algae by 35% and Convert Rate by a whopping 250%",
+		Description = "da big barrel of algae. Boosts Convert Rate by 250% and Algae by 35%.",
 		Price = 75000,
 		Currency = "Biomass",
 		ProductType = "Backpack",
@@ -308,7 +308,7 @@ local EquipmentConfig = {
 	-- Runic Shop Items
 	["Runic Shard"] = {
 		Name = "Runic Shard",
-		Description = "A fragment from the runic dimension put on Earth. Its ability to contain large amounts of algae is given due to its artifact on the back of the carved stone.",
+		Description = "A fragment from the runic dimension put on Earth. Its ability to contain large amounts of algae is given due to its artifact on the back of the carved stone. Boosts Convert Rate by 375% and Algae by 55%.",
 		Price = 225000, -- was 250,000 | pairs with MegaNet (600k) — RunicShop gateway
 		Currency = "Biomass",
 		ProductType = "Backpack",
@@ -322,7 +322,7 @@ local EquipmentConfig = {
 	},
 	["Turtle Shell"] = {
 		Name = "Turtle Shell",
-		Description = "A shell from the ancient turtles of the sea. Holds 3 million algae.",
+		Description = "A shell from the ancient turtles of the sea. Holds 3 million algae. Boosts Convert Rate by 525% and Algae by 70%.",
 		Price = 1500000, -- was 1,250,000 | pairs with StoneHammer (1.8M) — early-mid
 		Currency = "Biomass",
 		ProductType = "Backpack",
@@ -330,19 +330,37 @@ local EquipmentConfig = {
 		Shop = "RunicShop",
 		Cam = "Cam2",
 		-- Backpack Stats
-		Capacity = 400000,
+		Capacity = 99999999999999999,
 		ConvertAdd = 525, -- was 300 (BUG: was less than corrected RunicShard's 375!)
 		AlgaePercentAdd = 70, -- was 65
 	},
-	["Poseidon"] = {
-		Name = "Poseidon",
-		Description = "God's greatest gift. Spawns a TIDAL WAVE after 6 consecutive hits.",
-		Price = 3500000,
+	["Stonepack"] = {
+		Name = "Stonepack",
+		Description = "A sturdy backpack made from carved runic stones. Boosts Convert Rate by 450% and Algae by 62%.",
+		Price = 750000,
 		Currency = "Biomass",
-		ProductType = "Tool",
-		ToolId = "Poseidon",
+		ProductType = "Backpack",
+		BackpackId = "Stonepack",
 		Shop = "RunicShop",
-		Cam = "Cam7"
+		Cam = "Cam3",
+		-- Backpack Stats
+		Capacity = 500000,
+		ConvertAdd = 450,
+		AlgaePercentAdd = 62,
+	},
+	["Portable Pillar"] = {
+		Name = "Portable Pillar",
+		Description = "A portable pillar of immense runic energy. Boosts Convert Rate by 750% and Algae by 110%.",
+		Price = 2500000,
+		Currency = "Biomass",
+		ProductType = "Backpack",
+		BackpackId = "PortablePillar",
+		Shop = "RunicShop",
+		Cam = "Cam4",
+		-- Backpack Stats
+		Capacity = 4000000,
+		ConvertAdd = 750,
+		AlgaePercentAdd = 110,
 	},
 	["MegaNet"] = {
 		Name = "Mega Net",
@@ -352,27 +370,7 @@ local EquipmentConfig = {
 		ProductType = "Tool",
 		ToolId = "MegaNet",
 		Shop = "RunicShop",
-		Cam = "Cam3"
-	},
-	["Sun Staff"] = {
-		Name = "Sun Staff",
-		Description = "A portable sun encapsulated in a staff.",
-		Price = 350000,
-		Currency = "Biomass",
-		ProductType = "Tool",
-		ToolId = "Sun Staff",
-		Shop = "RunicShop",
 		Cam = "Cam5"
-	},
-	["SharkScythe"] = {
-		Name = "Shark Scythe",
-		Description = "A scythe embued with the power of the greatest sharks.",
-		Price = 8500000,
-		Currency = "Biomass",
-		ProductType = "Tool",
-		ToolId = "SharkScythe",
-		Shop = "RunicShop",
-		Cam = "Cam6"
 	},
 	["StoneHammer"] = {
 		Name = "Stone Hammer",
@@ -382,7 +380,114 @@ local EquipmentConfig = {
 		ProductType = "Tool",
 		ToolId = "StoneHammer",
 		Shop = "RunicShop",
+		Cam = "Cam6"
+	},
+	["Sun Staff"] = {
+		Name = "Sun Staff",
+		Description = "A portable sun encapsulated in a staff.",
+		Price = 350000,
+		Currency = "Biomass",
+		ProductType = "Tool",
+		ToolId = "Sun Staff",
+		Shop = "RunicShop",
+		Cam = "Cam7"
+	},
+	["SharkScythe"] = {
+		Name = "Shark Scythe",
+		Description = "A scythe embued with the power of the greatest sharks.",
+		Price = 8500000,
+		Currency = "Biomass",
+		ProductType = "Tool",
+		ToolId = "SharkScythe",
+		Shop = "RunicShop",
+		Cam = "Cam8"
+	},
+	["Poseidon"] = {
+		Name = "Poseidon",
+		Description = "God's greatest gift. Spawns a TIDAL WAVE after 6 consecutive hits.",
+		Price = 3500000,
+		Currency = "Biomass",
+		ProductType = "Tool",
+		ToolId = "Poseidon",
+		Shop = "RunicShop",
+		Cam = "Cam9"
+	},
+	["Zooplankton_1"] = {
+		Name = "Zooplankton",
+		DisplayName = "1x Zooplankton",
+		Description = "A single zooplankton. Transforms your fish into a random fish!",
+		Price = 1250000,
+		Currency = "Biomass",
+		Amount = 1,
+		ProductType = "Item",
+		Shop = "ZooplanktonMachine",
+		Cam = "Cam1"
+	},
+	["Zooplankton_10"] = {
+		Name = "Zooplankton",
+		DisplayName = "10x Zooplankton",
+		Description = "Ten zooplankton packages. Bulk mutation power!",
+		Price = 12500000,
+		Currency = "Biomass",
+		Amount = 10,
+		ProductType = "Item",
+		Shop = "ZooplanktonMachine",
+		Cam = "Cam2"
+	},
+	["Zooplankton_100"] = {
+		Name = "Zooplankton",
+		DisplayName = "100x Zooplankton",
+		Description = "One hundred zooplankton packages. High volume mutations!",
+		Price = 125000000,
+		Currency = "Biomass",
+		Amount = 100,
+		ProductType = "Item",
+		Shop = "ZooplanktonMachine",
+		Cam = "Cam3"
+	},
+	["Zooplankton_1000"] = {
+		Name = "Zooplankton",
+		DisplayName = "1,000x Zooplankton",
+		Description = "One thousand zooplankton packages. Mega volume mutations!",
+		Price = 1250000000,
+		Currency = "Biomass",
+		Amount = 1000,
+		ProductType = "Item",
+		Shop = "ZooplanktonMachine",
 		Cam = "Cam4"
+	},
+	["Zooplankton_10000"] = {
+		Name = "Zooplankton",
+		DisplayName = "10,000x Zooplankton",
+		Description = "Ten thousand zooplankton packages. Colossal volume mutations!",
+		Price = 12500000000,
+		Currency = "Biomass",
+		Amount = 10000,
+		ProductType = "Item",
+		Shop = "ZooplanktonMachine",
+		Cam = "Cam5"
+	},
+	["Zooplankton_100000"] = {
+		Name = "Zooplankton",
+		DisplayName = "100,000x Zooplankton",
+		Description = "One hundred thousand zooplankton packages. Ultimate volume mutations!",
+		Price = 125000000000,
+		Currency = "Biomass",
+		Amount = 100000,
+		ProductType = "Item",
+		Shop = "ZooplanktonMachine",
+		Cam = "Cam6"
+	},
+	["Eviction_1"] = {
+		Name = "Eviction",
+		DisplayName = "1x Eviction",
+		Description = "Swipe over a fish in your aquarium to remove it.",
+		Price = 250000,
+		Currency = "Biomass",
+		Amount = 1,
+		ProductType = "Item",
+		Shop = "ZooplanktonMachine",
+		Cam = "Cam1"
 	},
 }
 
@@ -392,11 +497,11 @@ EquipmentConfig.Eggs = {
 		Description = "Guarantees a Basic Fish, with the possibility of something rarer..",
 		ImageId = "rbxassetid://91092112542656", -- Placeholder
 		Rarities = {
-			Common = 98,
-			Rare = 1.5,
-			Epic = 0.4,
-			Legendary = .1,
-			Mythic = 0
+			Common = 85,
+			Rare = 12,
+			Epic = 2,
+			Legendary = 0.9999999,
+			Mythic = 0.0000001
 		}
 	},
 	["Ruby Egg"] = {
@@ -413,7 +518,7 @@ EquipmentConfig.Eggs = {
 	},
 	["Sapphire Egg"] = {
 		DisplayName = "Sapphire Egg",
-		Description = "test",
+		Description = "An egg infused with sapphire crystals. Guarantees an Epic fish!",
 		ImageId = "rbxassetid://85374010696833", -- Placeholder
 		Rarities = {
 			Common = 0,
@@ -425,7 +530,7 @@ EquipmentConfig.Eggs = {
 	},
 	["Bronze Egg"] = {
 		DisplayName = "Bronze Egg",
-		Description = "A sparkling egg with a tough coating of bronze. Guarantees fish above rare!",
+		Description = "A sparkling egg with a tough coating of bronze. Guarantees a Rare fish!",
 		ImageId = "rbxassetid://108860105364532", -- Placeholder
 		Rarities = {
 			Common = 0,
@@ -435,10 +540,10 @@ EquipmentConfig.Eggs = {
 			Mythic = 0.1
 		}
 	},
-	["mythic Egg"] = {
-		DisplayName = "Mythic Egg",
-		Description = "Guaranteed Mythic Fish!",
-		ImageId = "rbxassetid://88144930254065",
+	["Heavensent Egg"] = {
+		DisplayName = "Heavensent Egg",
+		Description = "An egg created by the heavens above. Guarantees a Mythic fish!",
+		ImageId = "rbxassetid://81882871306355",
 		Rarities = {
 			Common = 0,
 			Rare = 0,
@@ -469,9 +574,16 @@ EquipmentConfig.Eggs = {
 			Common = 0,
 			Rare = 90,
 			Epic = 8,
-			Legendary = 1.999,
-			Mythic = 0.001
+			Legendary = 1.997,
+			Mythic = 0.003
 		}
+	},
+	["Eviction"] = {
+		DisplayName = "Eviction",
+		Description = "Swipe over a fish in your aquarium to remove it.",
+		ImageId = "rbxassetid://80180445405238", -- Placeholder
+		RequiresFish = true,
+		IsEviction = true,
 	},
 	["Pearl"] = {
 		DisplayName = "Pearl",
@@ -490,6 +602,7 @@ EquipmentConfig.Eggs = {
 		ImageId = "rbxassetid://131703071734552", -- Placeholder
 		RequiresFish = true,
 		IsFeed = true, -- Flag for client/server logic
+		XPAmount = 1000,
 	},
 	["Sea Mine"] = {
 		DisplayName = "Sea Mine",
@@ -499,9 +612,42 @@ EquipmentConfig.Eggs = {
 	},
 	["Fertilizer"] = {
 		DisplayName = "Fertilizer",
-		Description = "Boosts algae by 100% for 10 minutes.",
+		Description = "Boosts the algae from the reef you are on by 100% for 10 minutes.",
 		ImageId = "rbxassetid://76687032697276", -- Placeholder
 		IsConsumable = true,
+		Multiplier = 2.0,
+		Duration = 600, -- 10 minutes in seconds
+	},
+	["Orange Gem"] = {
+		DisplayName = "Orange Gem",
+		Description = "A glowing orange gemstone. Boosts Orange Algae by 1.5x (+50%) for 15 minutes.",
+		ImageId = "rbxassetid://140450762160289",
+		IsConsumable = true,
+		Multiplier = 1.5,
+		Duration = 900, -- 15 minutes in seconds
+	},
+	["Convertrix"] = {
+		DisplayName = "Convertrix",
+		Description = "Instantly converts all algae in your backpack into biomass!",
+		ImageId = "rbxassetid://10652674482", -- Generic potion/chemical placeholder
+		IsConsumable = true,
+		BaseYieldMultiplier = 1.0, -- Used to scale the amount of biomass gained
+	},
+	["Green Gem"] = {
+		DisplayName = "Green Gem",
+		Description = "A glowing green gemstone. Boosts Green Algae by 1.5x (+50%) for 15 minutes.",
+		ImageId = "rbxassetid://92265509856999",
+		IsConsumable = true,
+		Multiplier = 1.5,
+		Duration = 900,
+	},
+	["Pink Gem"] = {
+		DisplayName = "Pink Gem",
+		Description = "A glowing pink gemstone. Boosts Pink Algae by 1.5x (+50%) for 15 minutes.",
+		ImageId = "rbxassetid://122222171689349",
+		IsConsumable = true,
+		Multiplier = 1.5,
+		Duration = 900,
 	}
 }
 

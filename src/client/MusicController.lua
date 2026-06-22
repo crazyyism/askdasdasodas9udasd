@@ -163,7 +163,7 @@ function MusicController.UpdateMusic()
 		
 		-- Special Start Time for To The Moon
 		if newMusicId == MusicConfig["ToTheMoon"] then
-			sound.TimePosition = 0
+			sound.TimePosition = MusicConfig.ToTheMoonStartTime or 0
 		end
 		
 		currentSound = sound
@@ -204,11 +204,134 @@ function MusicController.Start()
 		return a + (b - a) * t
 	end
 
+	-- Screen Visualizer for "To The Moon"
+	local VisualizerContainer = nil
+	local visualizerBars = {}
+	local lastVisualizerBeatIndex = -1
+
+	local function IsInVfxWindow(timePos)
+		return (timePos >= 74.6 and timePos <= 94) or (timePos >= 117.3 and timePos <= 126.3) or (timePos >= 128 and timePos <= 137.3) or (timePos >= 138)
+	end
+
+	local function createVisualizer()
+		if VisualizerContainer then return end
+		
+		local playerGui = player:FindFirstChild("PlayerGui")
+		if not playerGui then return end
+		
+		VisualizerContainer = Instance.new("ScreenGui")
+		VisualizerContainer.Name = "ToTheMoonVisualizerGui"
+		VisualizerContainer.ResetOnSpawn = false
+		VisualizerContainer.DisplayOrder = 9999
+		VisualizerContainer.IgnoreGuiInset = true
+		VisualizerContainer.Parent = playerGui
+		
+		local numBars = 16
+		local barWidth = 1 / numBars
+		local gapScale = 0.8 -- 20% gap between bars so they are separate
+		
+		table.clear(visualizerBars)
+		
+		for i = 1, numBars do
+			-- Top bar
+			local topBar = Instance.new("Frame")
+			topBar.Name = "TopBar_" .. i
+			topBar.AnchorPoint = Vector2.new(0.5, 0)
+			topBar.Position = UDim2.new((i - 0.5) * barWidth, 0, 0, 0)
+			topBar.Size = UDim2.new(barWidth * gapScale, 0, 0, 0)
+			topBar.BorderSizePixel = 0
+			topBar.Parent = VisualizerContainer
+			
+			-- Bottom bar
+			local bottomBar = Instance.new("Frame")
+			bottomBar.Name = "BottomBar_" .. i
+			bottomBar.AnchorPoint = Vector2.new(0.5, 1)
+			bottomBar.Position = UDim2.new((i - 0.5) * barWidth, 0, 1, 0)
+			bottomBar.Size = UDim2.new(barWidth * gapScale, 0, 0, 0)
+			bottomBar.BorderSizePixel = 0
+			bottomBar.Parent = VisualizerContainer
+			
+			table.insert(visualizerBars, {
+				top = topBar,
+				bottom = bottomBar,
+				index = i
+			})
+		end
+	end
+
+	local function destroyVisualizer()
+		if VisualizerContainer then
+			VisualizerContainer:Destroy()
+			VisualizerContainer = nil
+		end
+		table.clear(visualizerBars)
+	end
+
 	-- State Tracking
 	local activeEffects = {} -- [UserId] = {Sound, Bruh3, ...}
 
-	RunService.RenderStepped:Connect(function()
+	RunService.RenderStepped:Connect(function(dt)
 		local disableStrobing = lastData and lastData.Settings and lastData.Settings.DisableStrobing
+		
+		-- Handle "To The Moon" Visualizer for LocalPlayer
+		local localOverride = player:GetAttribute("MusicOverride")
+		local localIsToTheMoon = (localOverride == MusicConfig["ToTheMoon"])
+		
+		local timePos = currentSound and currentSound.IsPlaying and currentSound.TimePosition or 0
+		local inVfxWindow = IsInVfxWindow(timePos)
+		
+		if localIsToTheMoon and not disableStrobing and inVfxWindow then
+			createVisualizer()
+			
+			-- Beat Detection at constant 180 BPM based on TimePosition
+			local beatInterval = 60 / 180
+			local currentBeatIndex = math.floor(timePos / beatInterval)
+			local isBeat = false
+			if currentBeatIndex ~= lastVisualizerBeatIndex then
+				lastVisualizerBeatIndex = currentBeatIndex
+				isBeat = true
+			end
+			
+			local maxHeight = 0.15 -- max 15% Y scale height
+			
+			-- Cycling "To The Moon" colors
+			local hue = (os.clock() * 0.3) % 1
+			local rainbowColor = Color3.fromHSV(hue, 0.8, 1)
+			local darkRainbowColor = Color3.fromHSV(hue, 0.8, 0.18) -- Darker shade of the same rainbow hue
+			
+			for _, bar in ipairs(visualizerBars) do
+				local i = bar.index
+				
+				-- Alternate colors: even is rainbow, odd is dark rainbow
+				local color = (i % 2 == 0) and rainbowColor or darkRainbowColor
+				
+				if not bar.currentHeight then
+					bar.currentHeight = 0
+				end
+				
+				-- Snaps up to a NEW random peak ONLY on beats, decays on normal frames
+				if isBeat then
+					bar.sensitivity = 0.35 + 0.65 * math.random()
+					bar.currentHeight = bar.sensitivity * maxHeight
+				else
+					bar.currentHeight = math.max(0, bar.currentHeight - (dt * 0.6))
+				end
+				
+				local targetHeightScale = math.clamp(bar.currentHeight, 0, maxHeight)
+				
+				if bar.top and bar.top.Parent then
+					bar.top.Size = UDim2.new(bar.top.Size.X.Scale, 0, targetHeightScale, 0)
+					bar.top.BackgroundColor3 = color
+				end
+				if bar.bottom and bar.bottom.Parent then
+					bar.bottom.Size = UDim2.new(bar.bottom.Size.X.Scale, 0, targetHeightScale, 0)
+					bar.bottom.BackgroundColor3 = color
+				end
+			end
+		else
+			destroyVisualizer()
+		end
+
 		local maxIntensity = 0
 		local myChar = player.Character
 		local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -238,7 +361,8 @@ function MusicController.Start()
 					activeEffects[p.UserId] = {
 						LeftZ = -baseDistance, 
 						RightZ = baseDistance,
-						CurveSize = minCurve
+						CurveSize = minCurve,
+						LastBeatIndex = -1
 					}
 				end
 				local state = activeEffects[p.UserId]
@@ -258,7 +382,7 @@ function MusicController.Start()
 						s.Parent = root
 						s.Name = "MoonFX_Audio"
 						s:Play()
-						s.TimePosition = 78
+						s.TimePosition = MusicConfig.ToTheMoonStartTime or 0
 						state.Sound = s
 					end
 					soundObj = state.Sound
@@ -280,15 +404,33 @@ function MusicController.Start()
 				
 				-- 3. Animate Visuals
 				if state.Bruh3 and soundObj and soundObj.IsPlaying then
-					local loudness = math.clamp((soundObj.PlaybackLoudness / 450), 0, 1)
+					local loudness = math.clamp((soundObj.PlaybackLoudness / 1300), 0, 1)
+					local sTimePos = soundObj.TimePosition
+					local inEmitWindow = IsInVfxWindow(sTimePos)
 					
-					-- Contribute to Global Screen Shake/Flash if close (Only if alive)
-					if myRoot and isAlive then
+					local beatInterval = 60 / 180
+					local currentBeatIndex = math.floor(sTimePos / beatInterval)
+					local isBeat = (currentBeatIndex ~= state.LastBeatIndex)
+					
+					if not state.Intensity then
+						state.Intensity = 0
+					end
+					
+					local isNewBeat = false
+					if isBeat and inEmitWindow then
+						state.LastBeatIndex = currentBeatIndex
+						state.Intensity = 1.0
+						isNewBeat = true
+					else
+						state.Intensity = math.max(0, state.Intensity - dt * 3.5)
+					end
+
+					if myRoot and isAlive and inEmitWindow then
 						local dist = (root.Position - myRoot.Position).Magnitude
 						if dist < 100 then
 							-- Distance attenuation for intensity
 							local distFactor = 1 - (dist / 100)
-							local localInt = loudness * distFactor
+							local localInt = state.Intensity * distFactor
 							if localInt > maxIntensity then maxIntensity = localInt end
 						end
 					end
@@ -340,24 +482,19 @@ function MusicController.Start()
 							if d:IsA("ParticleEmitter") then d.Color = rbColor end
 						end
 						
-						-- Emit Particles from "root" attachment on beat
+						-- Emit Particles from "root" attachment on beat (180 BPM constant tempo, only within active song timeframes)
 						local rootAtt = state.Bruh3:FindFirstChild("root")
-						if rootAtt and loudness > 0.92 then -- Beat threshold
-							local now = os.clock()
-							if not state.LastEmitTime or (now - state.LastEmitTime) > 0.2 then -- Debounce (0.2s)
-								state.LastEmitTime = now
-								
-								-- Harvest trigger for LocalPlayer
-								if p == player then
-									local evt = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("BeatHarvestEvent")
-									if evt then evt:FireServer() end
-								end
-								
-								for _, child in ipairs(rootAtt:GetChildren()) do
-									local emitAmount = child:GetAttribute("emit")
-									if child:IsA("ParticleEmitter") and emitAmount and type(emitAmount) == "number" then
-										child:Emit(emitAmount)
-									end
+						if rootAtt and isNewBeat then
+							-- Harvest trigger for LocalPlayer
+							if p == player then
+								local evt = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("BeatHarvestEvent")
+								if evt then evt:FireServer() end
+							end
+							
+							for _, child in ipairs(rootAtt:GetChildren()) do
+								local emitAmount = child:GetAttribute("emit")
+								if child:IsA("ParticleEmitter") and emitAmount and type(emitAmount) == "number" then
+									child:Emit(emitAmount)
 								end
 							end
 						end

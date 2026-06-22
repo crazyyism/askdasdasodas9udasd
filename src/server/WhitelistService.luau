@@ -1,7 +1,7 @@
 local Players = game:GetService("Players")
 
 -- CONFIGURATION
-local IS_WHITELIST_ENABLED = true -- Set to false to allow everyone to join
+local IS_WHITELIST_ENABLED = false -- Set to false to allow everyone to join
 local ALLOWED_USERNAMES = {
 	"Crazyyism",
 	"DevilDiver232",

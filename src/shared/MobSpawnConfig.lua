@@ -3,15 +3,23 @@ local MobSpawnConfig = {}
 MobSpawnConfig.Reefs = {
 	["Freshwater Reef"] = {
 		{
-			Template = "Jellyfish", -- You can change this to any Mob template inside ReplicatedStorage
-			Health = 20,
+			SpawnPartName = "FrogSpawn",
 			Level = 1,
-			SpawnPartName = "MobSpawn",
-			RespawnTime = 5, -- Seconds to wait before respawning
-			Drops = {
-				{Type = "Token", Name = "Biomass", Amount = 5, Chance = 1.0},
-				{Type = "Token", Name = "FishFeed", Amount = 1, Chance = 1.0}
-			}
+			-- RespawnTime = 3 -- Optional override (falls back to MobConfig default if nil)
+		}
+	},
+	["Trash Reef"] = {
+		{
+			SpawnPartName = "spawnfrog",
+			Level = 2,
+			RespawnTime = 120,
+			SpawnAtPart = true
+		},
+		{
+			SpawnPartName = "FrogSpawn",
+			Level = 2,
+			RespawnTime = 120,
+			SpawnAtPart = true
 		}
 	}
 }

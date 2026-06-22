@@ -102,4 +102,6 @@ ResourceConfig.Fields = {
 	},
 }
 
+ResourceConfig.Fields["Warrior’s Reef"] = ResourceConfig.Fields["Warrior's Reef"]
+
 return ResourceConfig

@@ -14,6 +14,36 @@ local MobService = require(script.Parent.MobService)
 local CapacityNotified = {} -- [userId] = clock()
 local CAPACITY_NOTIFY_COOLDOWN = 5
 
+local function getFieldFolder(fieldName)
+	if not fieldName then return nil end
+	local folder = workspace:FindFirstChild(fieldName)
+	if folder then return folder end
+	
+	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	for _, child in ipairs(workspace:GetChildren()) do
+		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+		if childClean == cleanName then
+			return child
+		end
+	end
+	return nil
+end
+
+local function GetFieldConfig(fieldName)
+	if not fieldName then return nil end
+	local cfg = ResourceConfig.Fields[fieldName]
+	if cfg then return cfg end
+	
+	local clean = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	for name, data in pairs(ResourceConfig.Fields) do
+		local c = string.lower(name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+		if c == clean then
+			return data
+		end
+	end
+	return nil
+end
+
 local function NotifyCapacityFull(player)
 	local now = os.clock()
 	if not CapacityNotified[player.UserId] or (now - CapacityNotified[player.UserId]) >= CAPACITY_NOTIFY_COOLDOWN then
@@ -52,7 +82,7 @@ local function GetFieldName(part)
 	if not part then return nil end
 	local p = part.Parent
 	while p and p ~= workspace do
-		if ResourceConfig.Fields[p.Name] then return p.Name end
+		if GetFieldConfig(p.Name) then return p.Name end
 		p = p.Parent
 	end
 	return part.Parent and part.Parent.Name
@@ -62,7 +92,7 @@ local function ValidateZoneAccess(data, targetPart)
 	local fieldName = GetFieldName(targetPart)
 	if not fieldName then return true end
 	
-	local config = ResourceConfig.Fields[fieldName]
+	local config = GetFieldConfig(fieldName)
 	if not config then return true end
 
 	local fishCount = 0
@@ -157,7 +187,7 @@ local function GetAlgaeMultipliers(data, targetPart, consumeMark)
 		end
 	end
 	
-	return (1 + baseBoost) * (1 + percentBoost) * markMult * infectMult * reefMult
+	return 1 + (baseBoost + percentBoost) * markMult * infectMult * reefMult
 end
 
 -- Helper: Get total critical power including bonuses
@@ -565,6 +595,8 @@ local function TriggerPassive(player, fishIndex, fishConfig, centerPart)
 					end
 				end
 			end
+		elseif passiveName == "Mitosis" then
+			AbilityService.SpawnMitosisClone(player)
 		elseif passiveName == "Glow+" then
 			-- Like Glow, but upgrading already-marked algae to 1.75x (red mark)
 			local radius = passiveData.Radius or 24
@@ -938,8 +970,10 @@ local function ExecuteHarvestBatch(player, parts, toolStats, skipVisual, consoli
 	local SeaMineService = require(script.Parent.SeaMineService)
 	
 	-- Shrink + Mark Dirty (Tokens have already been handled)
+	local anySuccess = false
 	for _, req in ipairs(requests) do
 		if req.Success then
+			anySuccess = true
 			req.CV.Value -= req.Burn
 			FieldService.MarkDirty(req.Part)
 			UpdateVisualShrink(req.Part, req.Burn)
@@ -947,6 +981,10 @@ local function ExecuteHarvestBatch(player, parts, toolStats, skipVisual, consoli
 				SeaMineService.AddAlgae(player, req.Part.Position, req.GrossYield)
 			end
 		end
+	end
+	
+	if anySuccess then
+		-- Spawn logic moved exclusively to MobSpawnConfig 120s timer
 	end
 end
 
@@ -960,7 +998,7 @@ function HarvestService.MarkAlgaeArea(position, radius, duration, multiplier)
 	overlapParams.FilterType = Enum.RaycastFilterType.Include
 	local filterFolders = {}
 	for fieldName, _ in pairs(ResourceConfig.Fields) do
-		local f = workspace:FindFirstChild(fieldName)
+		local f = getFieldFolder(fieldName)
 		if f then table.insert(filterFolders, f) end
 	end
 	overlapParams.FilterDescendantsInstances = filterFolders
@@ -1178,7 +1216,7 @@ BeatHarvestEvent.OnServerEvent:Connect(function(player)
 	
 	-- Optimization: Only check fields (folders in Workspace with "Field" in name or from Config)
 	for fieldName, _ in pairs(ResourceConfig.Fields) do
-		local field = workspace:FindFirstChild(fieldName)
+		local field = getFieldFolder(fieldName)
 		if field then
 			for _, part in ipairs(field:GetChildren()) do
 				if part:IsA("BasePart") then
@@ -1245,7 +1283,8 @@ function HarvestService.OnHarvest(player, arg)
 		
 		for _, part in ipairs(arg) do
 			if part and part:IsA("BasePart") then
-				if (root.Position - part.Position).Magnitude <= maxDist then
+				local distXZ = Vector2.new(root.Position.X - part.Position.X, root.Position.Z - part.Position.Z).Magnitude
+				if distXZ <= maxDist and math.abs(root.Position.Y - part.Position.Y) < 35 then
 					table.insert(validParts, part)
 				end
 			end
@@ -1267,11 +1306,12 @@ function HarvestService.OnHarvest(player, arg)
 		
 		-- Start Validation
 		local validParent = targetPart.Parent and targetPart.Parent.Name
-		if not validParent or not ResourceConfig.Fields[validParent] then return end
+		if not validParent or not GetFieldConfig(validParent) then return end
 		if not ResourceConfig.Types[targetPart.Name] then return end
 		
 		local maxSingleDist = (toolName == "Sun Staff" or toolName == "SunStaff" or toolName == "Crystiken") and 150 or allowedRange
-		if (root.Position - targetPart.Position).Magnitude > maxSingleDist then return end
+		local distXZ = Vector2.new(root.Position.X - targetPart.Position.X, root.Position.Z - targetPart.Position.Z).Magnitude
+		if distXZ > maxSingleDist or math.abs(root.Position.Y - targetPart.Position.Y) >= 35 then return end
 		
 		-- Cooldown Logic (Use LastPart optimization for single clicking)
 		if cdData.LastPart ~= targetPart and activeCooldown > 0.15 then activeCooldown = 0.15 end
@@ -1307,20 +1347,38 @@ function HarvestService.OnHarvest(player, arg)
 			-- Grid Pattern Collection
 			local centerPos = targetPart.Position
 			local playerCF = root.CFrame
-			local playerLook = playerCF.LookVector * Vector3.new(1, 0, 1)
-			local playerRight = playerCF.RightVector * Vector3.new(1, 0, 1)
-			
-			if math.abs(playerLook.X) > math.abs(playerLook.Z) then
-				playerLook = Vector3.new(math.sign(playerLook.X), 0, 0)
+			local playerLookRaw = playerCF.LookVector * Vector3.new(1, 0, 1)
+			if playerLookRaw.Magnitude > 0 then
+				playerLookRaw = playerLookRaw.Unit
 			else
-				playerLook = Vector3.new(0, 0, math.sign(playerLook.Z))
+				playerLookRaw = Vector3.new(0, 0, -1)
 			end
-			playerRight = playerLook:Cross(Vector3.new(0, 1, 0))
+			
+			-- Get local horizontal axes of targetPart (projected onto XZ plane)
+			local partLook = targetPart.CFrame.LookVector * Vector3.new(1, 0, 1)
+			if partLook.Magnitude > 0 then partLook = partLook.Unit else partLook = Vector3.new(0, 0, -1) end
+			
+			local partRight = targetPart.CFrame.RightVector * Vector3.new(1, 0, 1)
+			if partRight.Magnitude > 0 then partRight = partRight.Unit else partRight = Vector3.new(1, 0, 0) end
+			
+			-- Project player look onto the part's local axes to find the closest local direction
+			local dotLook = playerLookRaw:Dot(partLook)
+			local dotRight = playerLookRaw:Dot(partRight)
+			
+			local playerLook
+			if math.abs(dotLook) > math.abs(dotRight) then
+				playerLook = partLook * math.sign(dotLook)
+			else
+				playerLook = partRight * math.sign(dotRight)
+			end
+			local playerRight = playerLook:Cross(Vector3.new(0, 1, 0))
 			
 			for _, offset in ipairs(pattern) do
 				local ox, oz = offset[1], offset[2]
 				if ox == 0 and oz == 0 then
-					table.insert(targets, targetPart)
+					if not table.find(targets, targetPart) then
+						table.insert(targets, targetPart)
+					end
 				else
 					local size = targetPart:GetAttribute("OriginalSize") or targetPart.Size
 					local spacing = math.max(size.X, size.Z)
@@ -1333,12 +1391,12 @@ function HarvestService.OnHarvest(player, arg)
 					
 					if fieldFolder then
 						for _, p in ipairs(fieldFolder:GetChildren()) do
-							if p:IsA("BasePart") and p ~= targetPart then
+							if p:IsA("BasePart") and p ~= targetPart and not table.find(targets, p) then
 								local cap = p:FindFirstChild("Capacity")
 								local aa = p:FindFirstChild("AlgaeAmount")
 								if cap and aa and cap.Value > 0 then
 									local dist = (p.Position - expectedPos).Magnitude
-									if dist < (spacing * 0.6) and dist < bestDist then
+									if dist < (spacing * 1.5) and dist < bestDist then
 										bestDist = dist
 										bestPart = p
 									end
@@ -1418,12 +1476,12 @@ if not FishHarvestEvent then
 	FishHarvestEvent.Parent = Remotes
 end
 
-local function ProcessFishHarvest(player, fishIndex, targetPart)
+local function ProcessFishHarvest(player, fishIndex, targetPart, isRecursiveCall, forcedMegaCrit)
 	-- 1. Validation
 	if not targetPart or not targetPart.Parent then return end
 	
 	local fieldName = GetFieldName(targetPart)
-	local fieldConfig = ResourceConfig.Fields[fieldName]
+	local fieldConfig = GetFieldConfig(fieldName)
 	if not fieldConfig then return end 
 	
 	if player.Character and player.Character.PrimaryPart then
@@ -1460,7 +1518,7 @@ local function ProcessFishHarvest(player, fishIndex, targetPart)
 		end
 		
 		-- PASSIVE LOGIC CHECK
-		if speciesConfig.Passive then
+		if not isRecursiveCall and speciesConfig.Passive then
 			if not data.Session then data.Session = {} end
 			if not data.Session.FishPassiveCounts then data.Session.FishPassiveCounts = {} end
 			
@@ -1491,6 +1549,39 @@ local function ProcessFishHarvest(player, fishIndex, targetPart)
 				if shouldTrigger then
 					print("[DEBUG] Calling TriggerPassive for:", speciesConfig.Passive)
 					TriggerPassive(player, fishIndex, speciesConfig, targetPart)
+				end
+			end
+		end
+		
+		-- PASSIVE: _my.safespace. Check
+		if speciesConfig.Passive == "_my.safespace." then
+			local passiveCfg = FishConfig.Passives["_my.safespace."]
+			local sanctuaryRadius = passiveCfg and passiveCfg.SanctuaryRadius or 15
+			local harvestRadius = passiveCfg and passiveCfg.HarvestRadius or 6.5
+			
+			local AbilityService = require(script.Parent.AbilityService)
+			local activeSanctuaries = AbilityService.ActiveSanctuaries
+			if activeSanctuaries then
+				for _, sanc in pairs(activeSanctuaries) do
+					if sanc.IsActive and sanc.Position then
+						if (targetPart.Position - sanc.Position).Magnitude <= sanctuaryRadius then
+							forcedMegaCrit = true
+							break
+						end
+					end
+				end
+			end
+			
+			if forcedMegaCrit and not isRecursiveCall then
+				local fieldFolder = targetPart.Parent
+				for _, child in ipairs(fieldFolder:GetChildren()) do
+					if child:IsA("BasePart") and child ~= targetPart then
+						if (child.Position - targetPart.Position).Magnitude <= harvestRadius then
+							task.spawn(function()
+								ProcessFishHarvest(player, fishIndex, child, true, true)
+							end)
+						end
+					end
 				end
 			end
 		end
@@ -1548,15 +1639,22 @@ local function ProcessFishHarvest(player, fishIndex, targetPart)
 			["MegaCritical"] = trueMegaPct
 		})
 		
-		if critResult == "Critical" or critResult == "MegaCritical" then
-			if critResult == "MegaCritical" then
-				isMegaCrit = true
-				local megaPower = data.Stats.MegaCritPower or 10.0
-				unitYield = unitYield * megaPower
-			else
-				isCrit = true
-				local critPower = GetCritPower(data)
-				unitYield = unitYield * critPower
+		if forcedMegaCrit then
+			isMegaCrit = true
+			isCrit = false
+			local megaPower = data.Stats.MegaCritPower or 10.0
+			unitYield = unitYield * megaPower
+		else
+			if critResult == "Critical" or critResult == "MegaCritical" then
+				if critResult == "MegaCritical" then
+					isMegaCrit = true
+					local megaPower = data.Stats.MegaCritPower or 10.0
+					unitYield = unitYield * megaPower
+				else
+					isCrit = true
+					local critPower = GetCritPower(data)
+					unitYield = unitYield * critPower
+				end
 			end
 		end
 		
@@ -1574,6 +1672,7 @@ local function ProcessFishHarvest(player, fishIndex, targetPart)
 			bagIsFull = true
 			actualReward = 0
 			NotifyCapacityFull(player)
+			return nil -- DO NOT consume field capacity if backpack is full
 		end
 		
 		-- Calculate how much field capacity this consumes
@@ -1773,7 +1872,7 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 		overlapParams.FilterType = Enum.RaycastFilterType.Include
 		local filterFolders = {}
 		for fieldName, _ in pairs(ResourceConfig.Fields) do
-			local f = workspace:FindFirstChild(fieldName)
+			local f = getFieldFolder(fieldName)
 			if f then table.insert(filterFolders, f) end
 		end
 		overlapParams.FilterDescendantsInstances = filterFolders
@@ -2010,7 +2109,7 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 				overlapParams.FilterType = Enum.RaycastFilterType.Include
 				local filterFolders = {}
 				for fieldName, _ in pairs(ResourceConfig.Fields) do
-					local f = workspace:FindFirstChild(fieldName)
+					local f = getFieldFolder(fieldName)
 					if f then table.insert(filterFolders, f) end
 				end
 				overlapParams.FilterDescendantsInstances = filterFolders
@@ -2118,7 +2217,7 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 				overlapParams.FilterType = Enum.RaycastFilterType.Include
 				local filterFolders = {}
 				for fieldName, _ in pairs(ResourceConfig.Fields) do
-					local f = workspace:FindFirstChild(fieldName)
+					local f = getFieldFolder(fieldName)
 					if f then table.insert(filterFolders, f) end
 				end
 				overlapParams.FilterDescendantsInstances = filterFolders
@@ -2252,7 +2351,7 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 			if not hitList[p] and p.Name:match("Algae") then
 				-- Validate it's a resource field part
 				local field = p.Parent
-				if field and ResourceConfig.Fields[field.Name] then
+				if field and GetFieldConfig(field.Name) then
 					hitList[p] = true
 					table.insert(algaeTargets, p)
 				end
@@ -2603,14 +2702,32 @@ Players.PlayerAdded:Connect(function(player)
 			end
 		end)
 
-		task.delay(1, function() -- Wait for data load
+		task.spawn(function()
 			if not player or not player.Parent then return end
 			
-			local data = PlayerData.get(player)
-			local toolName = (data and data.EquippedTool) or "Fishing Net"
+			local data = nil
+			-- Wait for data to load
+			while player.Parent do
+				data = PlayerData.get(player)
+				if data then break end
+				task.wait(0.5)
+			end
+			
+			if not player.Parent or not data then return end
+			
+			local toolName = data.EquippedTool or "Fishing Net"
 			
 			-- Check if already has it
-			if player.Backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName) then
+			local existingTool = player.Backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName)
+			if existingTool then
+				local humanoid = char:FindFirstChild("Humanoid")
+				if existingTool.Parent == player.Backpack and humanoid then
+					task.delay(0.1, function()
+						if humanoid.Parent and existingTool.Parent == player.Backpack then
+							humanoid:EquipTool(existingTool)
+						end
+					end)
+				end
 				return
 			end
 			
@@ -2620,6 +2737,16 @@ Players.PlayerAdded:Connect(function(player)
 			if toolModel then
 				local clone = toolModel:Clone()
 				clone.Parent = player.Backpack
+				
+				-- Ensure the tool is physically equipped when they spawn
+				local humanoid = char:FindFirstChild("Humanoid")
+				if humanoid then
+					task.delay(0.1, function()
+						if clone.Parent == player.Backpack and humanoid.Parent then
+							humanoid:EquipTool(clone)
+						end
+					end)
+				end
 			else
 				-- warn("Tool not found in ReplicatedStorage: " .. toolName)
 			end

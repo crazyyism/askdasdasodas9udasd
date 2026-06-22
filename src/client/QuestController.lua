@@ -47,6 +47,27 @@ local DataUpdateEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("
 -- Data Listener for Progress
 local localData = nil
 
+local function PlaySFX(soundInstance, fallbackId)
+	local isSfxDisabled = localData and localData.Settings and localData.Settings.DisableSFX
+	if isSfxDisabled then return end
+
+	local sound = nil
+	if soundInstance and soundInstance:IsA("Sound") then
+		sound = soundInstance:Clone()
+	elseif fallbackId then
+		sound = Instance.new("Sound")
+		sound.SoundId = fallbackId
+		sound.Volume = 0.5
+	end
+
+	if sound then
+		sound.Parent = game:GetService("SoundService")
+		sound:Play()
+		local length = sound.TimeLength > 0 and sound.TimeLength or 2
+		game:GetService("Debris"):AddItem(sound, length + 0.5)
+	end
+end
+
 local function NotifyQuestCompletion(qId)
 	local qConfig = QuestConfig.Quests[qId]
 	local qName = qConfig and qConfig.Name or qId
@@ -91,8 +112,7 @@ local function NotifyQuestCompletion(qId)
 	end
 	-- Play SFX (Quest Finish)
 	local finishGoalSfx = ReplicatedStorage:FindFirstChild("SFX") and ReplicatedStorage.SFX:FindFirstChild("Quest") and ReplicatedStorage.SFX.Quest:FindFirstChild("FinishGoal")
-	local isSfxDisabled = localData and localData.Settings and localData.Settings.DisableSFX
-	if finishGoalSfx and not isSfxDisabled then finishGoalSfx:Play() end
+	PlaySFX(finishGoalSfx, "rbxassetid://9086152864")
 end
 
 -- Data Listener for Progress
@@ -187,8 +207,7 @@ DataUpdateEvent.OnClientEvent:Connect(function(data)
 				NotifierController:Notify("Quest Received: " .. qName, Color3.fromRGB(0, 191, 255))
 				
 				local receiveSfx = ReplicatedStorage:FindFirstChild("SFX") and ReplicatedStorage.SFX:FindFirstChild("Quest") and (ReplicatedStorage.SFX.Quest:FindFirstChild("Receive") or ReplicatedStorage.SFX.Quest:FindFirstChild("Recieve"))
-				local isSfxDisabled = localData and localData.Settings and localData.Settings.DisableSFX
-				if receiveSfx and not isSfxDisabled then receiveSfx:Play() end
+				PlaySFX(receiveSfx, "rbxassetid://4612382414")
 			end
 			
 			if shouldUpdate then
@@ -219,8 +238,7 @@ DataUpdateEvent.OnClientEvent:Connect(function(data)
 					if isInitialized and nowReady and not wasReady then
 						NotifierController:Notify(config.Name .. " is done! Talk to " .. (config.Giver or "Quest Giver"), Color3.fromRGB(0, 255, 0))
 						local finishSfx = ReplicatedStorage:FindFirstChild("SFX") and ReplicatedStorage.SFX:FindFirstChild("Quest") and ReplicatedStorage.SFX.Quest:FindFirstChild("Finish")
-						local isSfxDisabled = localData and localData.Settings and localData.Settings.DisableSFX
-						if finishSfx and not isSfxDisabled then finishSfx:Play() end
+						PlaySFX(finishSfx, "rbxassetid://9086152864")
 					end
 				end
 			end
@@ -367,11 +385,15 @@ local function SetupUI()
 end
 
 function QuestController.AssignQuest(questId)
+	if not questId then return end
+	
 	-- Fire Server to Start Quest persistent state
 	local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local StartQuest = Remotes:FindFirstChild("StartQuest")
 	if StartQuest then
 		StartQuest:FireServer(questId)
+	else
+		warn("Client: StartQuest Remote missing!")
 	end
 
 	if activeQuests[questId] then return end
@@ -379,10 +401,11 @@ function QuestController.AssignQuest(questId)
 	-- Notify immediately since we are starting it locally
 	local config = QuestConfig.Quests[questId]
 	local qName = config and config.Name or questId
-	NotifierController:Notify("Quest Received: " .. qName, Color3.fromRGB(0, 191, 255))
+	NotifierController:Notify("Received Quest: " .. qName, Color3.fromRGB(255, 215, 0))
 	
-	local receiveSfx = ReplicatedStorage:FindFirstChild("SFX") and ReplicatedStorage.SFX:FindFirstChild("Quest") and (ReplicatedStorage.SFX.Quest:FindFirstChild("Receive") or ReplicatedStorage.SFX.Quest:FindFirstChild("Recieve"))
-	if receiveSfx then receiveSfx:Play() end
+	local sfxFolder = ReplicatedStorage:FindFirstChild("SFX") and ReplicatedStorage.SFX:FindFirstChild("Quest")
+	local assignSfx = sfxFolder and (sfxFolder:FindFirstChild("Assign") or sfxFolder:FindFirstChild("Start") or sfxFolder:FindFirstChild("Accept") or sfxFolder:FindFirstChild("Receive") or sfxFolder:FindFirstChild("Recieve"))
+	PlaySFX(assignSfx, "rbxassetid://4612382414")
 	
 	activeQuests[questId] = 0
 	
@@ -500,6 +523,8 @@ function QuestController.UpdateQuestUI()
 							task.Text = "Fish placed in aquarium: " .. math.floor(cur) .. "/" .. goal
 						elseif k == "EquipmentsPurchased" then
 							task.Text = "Purchase equipments: " .. math.floor(cur) .. "/" .. goal
+						elseif k:match("Algae$") then
+							task.Text = "Collect " .. goal .. " " .. niceName .. "   " .. math.floor(cur) .. "/" .. goal
 						else
 							-- Plain field name (e.g. "Sun Reef") — show "Algae from [Field]"
 							task.Text = "Collect " .. goal .. " Algae from " .. niceName .. "   " .. math.floor(cur) .. "/" .. goal
@@ -600,6 +625,143 @@ local function ClearTypewriter()
 	end
 end
 
+local function GetBoldFont(baseFont)
+	local name = baseFont.Name
+	if not name:find("Bold") then
+		local boldFont = Enum.Font[name .. "Bold"]
+		if boldFont then
+			return boldFont
+		end
+	end
+	return baseFont
+end
+
+local function TokenizeDialogue(text)
+	local tokens = {}
+	
+	local styleStack = {
+		{
+			bold = false,
+			shake = false,
+			color = nil,
+			gradient = nil
+		}
+	}
+	
+	local function currentStyle()
+		return styleStack[#styleStack]
+	end
+
+	local i = 1
+	while i <= #text do
+		local tag, closing = nil, false
+		if text:sub(i, i) == "[" then
+			local tagEnd = text:find("]", i)
+			if tagEnd then
+				local tagContent = text:sub(i + 1, tagEnd - 1)
+				if tagContent:sub(1, 1) == "/" then
+					closing = true
+					tagContent = tagContent:sub(2)
+				end
+				
+				local tagName = tagContent:match("^([%w_]+)")
+				if tagName == "bold" or tagName == "shake" or tagName == "emph" or tagName == "emphasis" then
+					tag = tagName
+					i = tagEnd + 1
+					
+					if closing then
+						if #styleStack > 1 then
+							table.remove(styleStack)
+						end
+					else
+						local colorAttr = tagContent:match("color=([%d%s,]+)")
+						local gradientAttr = tagContent:match("gradient=([%d%s,|;]+)")
+						
+						local parsedColor = nil
+						if colorAttr then
+							local r, g, b = colorAttr:match("(%d+)[%s,]+(%d+)[%s,]+(%d+)")
+							if r and g and b then
+								parsedColor = Color3.fromRGB(tonumber(r), tonumber(g), tonumber(b))
+							end
+						end
+						
+						local parsedGradient = nil
+						if gradientAttr then
+							local color1, color2 = gradientAttr:match("([^|;]+)[|;](.+)")
+							if color1 and color2 then
+								local r1, g1, b1 = color1:match("(%d+)[%s,]+(%d+)[%s,]+(%d+)")
+								local r2, g2, b2 = color2:match("(%d+)[%s,]+(%d+)[%s,]+(%d+)")
+								if r1 and g1 and b1 and r2 and g2 and b2 then
+									parsedGradient = {
+										Color3.fromRGB(tonumber(r1), tonumber(g1), tonumber(b1)),
+										Color3.fromRGB(tonumber(r2), tonumber(g2), tonumber(b2))
+									}
+								end
+							end
+						end
+						
+						local parent = currentStyle()
+						local newStyle = {
+							bold = parent.bold,
+							shake = parent.shake,
+							color = parsedColor or parent.color,
+							gradient = parsedGradient or (not parsedColor and parent.gradient or nil)
+						}
+						
+						if tag == "bold" then
+							newStyle.bold = true
+						elseif tag == "shake" then
+							newStyle.shake = true
+						elseif tag == "emph" or tag == "emphasis" then
+							newStyle.bold = true
+							newStyle.shake = true
+						end
+						
+						table.insert(styleStack, newStyle)
+					end
+				end
+			end
+		end
+
+		if not tag then
+			local char = text:sub(i, i)
+			if char:match("%s") then
+				i = i + 1
+			else
+				local wordStart = i
+				while i <= #text do
+					local nextChar = text:sub(i, i)
+					if nextChar:match("%s") then
+						break
+					end
+					if nextChar == "[" then
+						local tagEnd = text:find("]", i)
+						if tagEnd then
+							local tagContent = text:sub(i + 1, tagEnd - 1)
+							if tagContent:sub(1, 1) == "/" then tagContent = tagContent:sub(2) end
+							local tagName = tagContent:match("^([%w_]+)")
+							if tagName == "bold" or tagName == "shake" or tagName == "emph" or tagName == "emphasis" then
+								break
+							end
+						end
+					end
+					i = i + 1
+				end
+				local word = text:sub(wordStart, i - 1)
+				local style = currentStyle()
+				table.insert(tokens, {
+					text = word,
+					bold = style.bold,
+					shake = style.shake,
+					color = style.color,
+					gradient = style.gradient
+				})
+			end
+		end
+	end
+	return tokens
+end
+
 local function PlayTypewriter(text)
 	if not questTextLabel then return end
 	
@@ -622,11 +784,10 @@ local function PlayTypewriter(text)
 	local containerWidth = containerSize.X
 	local containerHeight = containerSize.Y
 	
-	-- Split text into words
-	local words = text:split(" ")
+	-- Tokenize text into styled words
+	local styledWords = TokenizeDialogue(text)
 	
 	-- 1. Calculate Optimal Font Size (Mimic TextScaled)
-	-- Binary search or linear scan from max to min
 	local minSize = 10
 	local maxSize = 60 -- Reasonable max for dialogue
 	local bestSize = minSize
@@ -637,8 +798,9 @@ local function PlayTypewriter(text)
 		local lh = size * 1.2
 		local sw = TextService:GetTextSize(" ", size, font, Vector2.new(1000, 1000)).X
 		
-		for _, word in ipairs(words) do
-			local wBounds = TextService:GetTextSize(word, size, font, Vector2.new(containerWidth, 1000))
+		for _, item in ipairs(styledWords) do
+			local wordFont = item.bold and GetBoldFont(font) or font
+			local wBounds = TextService:GetTextSize(item.text, size, wordFont, Vector2.new(containerWidth, 1000))
 			if wBounds.X > containerWidth then return false end -- Word too long alone
 			
 			if cx + wBounds.X > containerWidth then
@@ -648,7 +810,6 @@ local function PlayTypewriter(text)
 			cx = cx + wBounds.X + sw
 		end
 		
-		-- Check total height (cy is top of last line, so add one line height)
 		if cy + lh > containerHeight then return false end
 		return true
 	end
@@ -666,14 +827,14 @@ local function PlayTypewriter(text)
 	local spaceWidth = TextService:GetTextSize(" ", textSize, font, Vector2.new(1000, 1000)).X
 	
 	-- 2. Layout Calculation
-	local layout = {} -- Stores {word, x, y, width, height}
+	local layout = {} -- Stores {word, x, y, width, height, bold, shake, color, gradient}
 	local currentX = 0
 	local currentY = 0
 	local lineLineWidths = {} -- Track width of each line for centering
-	local currentLineWords = {}
 	
-	for i, word in ipairs(words) do
-		local bounds = TextService:GetTextSize(word, textSize, font, Vector2.new(containerWidth, 1000))
+	for i, item in ipairs(styledWords) do
+		local wordFont = item.bold and GetBoldFont(font) or font
+		local bounds = TextService:GetTextSize(item.text, textSize, wordFont, Vector2.new(containerWidth, 1000))
 		
 		if currentX + bounds.X > containerWidth and currentX > 0 then
 			-- New Line
@@ -683,12 +844,16 @@ local function PlayTypewriter(text)
 		end
 		
 		table.insert(layout, {
-			text = word,
+			text = item.text,
 			x = currentX,
 			y = currentY,
 			w = bounds.X,
 			h = bounds.Y,
-			lineIndex = #lineLineWidths + 1
+			lineIndex = #lineLineWidths + 1,
+			bold = item.bold,
+			shake = item.shake,
+			color = item.color,
+			gradient = item.gradient
 		})
 		
 		currentX = currentX + bounds.X + spaceWidth
@@ -716,12 +881,21 @@ local function PlayTypewriter(text)
 		local label = Instance.new("TextLabel")
 		label.Name = "Word"
 		label.Text = item.text
-		label.Font = font
+		label.Font = item.bold and GetBoldFont(font) or font
 		label.TextSize = textSize
-		label.TextColor3 = color
+		label.TextColor3 = item.color or color
 		label.BackgroundTransparency = 1
 		label.Size = UDim2.fromOffset(item.w, item.h)
 		label.Parent = textFrame
+		
+		if item.gradient then
+			local uiGradient = Instance.new("UIGradient")
+			uiGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, item.gradient[1]),
+				ColorSequenceKeypoint.new(1, item.gradient[2])
+			})
+			uiGradient.Parent = label
+		end
 		
 		-- Animation Setup
 		local targetPos = UDim2.new(0, finalX, 0, finalY)
@@ -747,6 +921,27 @@ local function PlayTypewriter(text)
 			else
 				local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 				TweenService:Create(label, tweenInfo, {Position = targetPos, TextTransparency = 0}):Play()
+				
+				if item.shake then
+					task.spawn(function()
+						local startTime = os.clock()
+						local duration = 0.65
+						local shakeSpeed = 0.02
+						while os.clock() - startTime < duration do
+							if skipTypewriter then break end
+							local elapsed = os.clock() - startTime
+							local progress = elapsed / duration
+							local intensity = (1 - progress) * 12
+							
+							local offsetX = math.random(-intensity, intensity)
+							local offsetY = math.random(-intensity, intensity)
+							
+							label.Position = UDim2.new(0, finalX + offsetX, 0, finalY + offsetY)
+							task.wait(shakeSpeed)
+						end
+						label.Position = targetPos
+					end)
+				end
 			end
 		end)
 		
@@ -866,47 +1061,7 @@ end
 
 
 
-function QuestController.AssignQuest(questId)
-	if not questId then return end
-	
-	print("Client: AssignQuest Called ->", questId)
-	
-	local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-	local StartQuest = Remotes:FindFirstChild("StartQuest")
-	
-	if StartQuest then
-		StartQuest:FireServer(questId)
-	else
-		warn("Client: StartQuest Remote missing!")
-	end
-	
-	-- Optimistic Update
-	if activeQuests[questId] then return end
-	activeQuests[questId] = 0
-	QuestController.UpdateQuestUI()
-	
-	-- Notification & SFX
-	local qConfig = QuestConfig.Quests[questId]
-	local qName = qConfig and qConfig.Name or questId
-	NotifierController:Notify("Received Quest: " .. qName, Color3.fromRGB(255, 215, 0))
-	
-	local isSfxDisabled = localData and localData.Settings and localData.Settings.DisableSFX
-	if not isSfxDisabled then
-		local sfxFolder = ReplicatedStorage:FindFirstChild("SFX") and ReplicatedStorage.SFX:FindFirstChild("Quest")
-		local assignSfx = sfxFolder and (sfxFolder:FindFirstChild("Assign") or sfxFolder:FindFirstChild("Start") or sfxFolder:FindFirstChild("Accept"))
-		
-		if assignSfx then
-			assignSfx:Play()
-		else
-			local fallback = Instance.new("Sound")
-			fallback.SoundId = "rbxassetid://4612382414"
-			fallback.Volume = 0.5
-			fallback.Parent = game:GetService("SoundService")
-			fallback:Play()
-			game.Debris:AddItem(fallback, 2)
-		end
-	end
-end
+
 
 function QuestController.Start()
 	task.spawn(SetupUI)
@@ -1178,7 +1333,7 @@ function QuestController.Start()
 		else
 			-- No NPC nearby
 			if not dialogueActive then
-				if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Aquarium") and not actionLabel.Text:match("Convert") and not actionLabel.Text:match("Cannon") then
+				if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Aquarium") and not actionLabel.Text:match("Convert") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Machine") then
 					interactionFrame.Visible = false
 				end
 			end

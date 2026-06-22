@@ -12,6 +12,36 @@ local HueShifter = require(ReplicatedStorage.Shared.HueShifter)
 local AbilityUIController = require(script.Parent.AbilityUIController)
 
 local FishController = {}
+
+local function getFieldFolder(fieldName)
+	if not fieldName then return nil end
+	local folder = game.Workspace:FindFirstChild(fieldName)
+	if folder then return folder end
+	
+	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	for _, child in ipairs(game.Workspace:GetChildren()) do
+		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+		if childClean == cleanName then
+			return child
+		end
+	end
+	return nil
+end
+
+local function GetFieldConfig(fieldName)
+	if not fieldName then return nil end
+	local cfg = ResourceConfig.Fields[fieldName]
+	if cfg then return cfg end
+	
+	local clean = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	for name, data in pairs(ResourceConfig.Fields) do
+		local c = string.lower(name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+		if c == clean then
+			return data
+		end
+	end
+	return nil
+end
 local rng = Random.new()
 local spawnedFish = {} -- [index] = Model defined in FishSchool array
 local smoothedRootCF = nil
@@ -79,11 +109,13 @@ function FishController.Start()
 	end)
 	
 	local FishStateRelay = Remotes:WaitForChild("FishStateRelay")
-	FishStateRelay.OnClientEvent:Connect(function(packet)
-		if packet.OrbitTarget ~= nil then
-			_G.OrbitTarget = packet.OrbitTarget
-		else
-			_G.OrbitTarget = nil
+	FishStateRelay.OnClientEvent:Connect(function(arg1, arg2)
+		if typeof(arg1) == "table" then
+			if arg1.OrbitTarget ~= nil then
+				_G.OrbitTarget = arg1.OrbitTarget
+			else
+				_G.OrbitTarget = nil
+			end
 		end
 	end)
 
@@ -224,7 +256,7 @@ local function UpdateHighlight(model, enabled, forceRed)
 	if not model then return end
 	local highlight = model:FindFirstChild("FishHighlight")
 	
-	if enabled or forceRed then
+	if enabled then
 		if not highlight then
 			highlight = Instance.new("Highlight")
 			highlight.Name = "FishHighlight"
@@ -471,6 +503,10 @@ function SpawnRemoteFish(uid, idx, data)
 	clone:SetAttribute("FishID", data.Id)
 	clone:SetAttribute("OwnerUserId", uid)
 	
+	if clone.PrimaryPart and clone.PrimaryPart:FindFirstChild("EnergyGui") then
+		clone.PrimaryPart.EnergyGui:Destroy()
+	end
+	
 	for _, p in ipairs(clone:GetDescendants()) do
 		if p:IsA("BasePart") then
 			p.Anchored = true
@@ -549,6 +585,10 @@ function SpawnFish(index, fishData)
 	end
 	clone:SetAttribute("OwnerUserId", player.UserId)
 	clone:SetAttribute("Level", fishData.Level or 1)
+	
+	if clone.PrimaryPart and clone.PrimaryPart:FindFirstChild("EnergyGui") then
+		clone.PrimaryPart.EnergyGui:Destroy()
+	end
 	
 	-- Setup Model
 	if not clone.PrimaryPart then
@@ -673,17 +713,7 @@ function SpawnFish(index, fishData)
 		hi.Parent = clone
 	end
 	
-	-- Create Energy Bar if ability exists
-	if config.AbilityName or config.Ability then
-		local templateGui = FishModels:FindFirstChild("EnergyGui")
-		local bb
-		
-		if templateGui then
-			bb = templateGui:Clone()
-			bb.Adornee = clone.PrimaryPart
-			bb.Parent = clone.PrimaryPart
-		end
-	end
+	-- Energy Bar creation removed per request
 end
 
 
@@ -719,7 +749,7 @@ local function FindTarget(rootPos, allowedField)
 	local candidates = {}
 	local scanRange = 60 
 	
-	local folder = game.Workspace:FindFirstChild(allowedField)
+	local folder = getFieldFolder(allowedField)
 	if folder then
 		for _, part in ipairs(folder:GetChildren()) do
 			local cap = part:FindFirstChild("Capacity")
@@ -759,7 +789,7 @@ local function IsPlayerInField(char)
 	
 	while ray and ray.Instance and attempts > 0 do
 		local parent = ray.Instance.Parent
-		if parent and ResourceConfig.Fields[parent.Name] then
+		if parent and GetFieldConfig(parent.Name) then
 			return parent.Name
 		end
 		
@@ -784,7 +814,7 @@ local function FindRandomNeighbor(centerPos, radius, excludePart, allowedField)
 	if not allowedField then return nil end
 
 	local candidates = {}
-	local folder = game.Workspace:FindFirstChild(allowedField)
+	local folder = getFieldFolder(allowedField)
 	
 	if folder then
 		for _, part in ipairs(folder:GetChildren()) do
@@ -814,6 +844,61 @@ local function SafeUnit(vec)
 		return vec.Unit
 	end
 	return Vector3.new(0,0,1) -- Default forward
+end
+
+-- Weak table to prevent memory leaks when fish are destroyed
+local IllusionaryFishOffsets = setmetatable({}, {__mode = "k"})
+
+-- Helper: Animate specific fish models (e.g. Illusionary Fish rings)
+local function AnimateFishModel(model, fId, dt)
+	if fId == "Illusionary Fish" then
+		if not model.PrimaryPart then return end
+		
+		-- Cache initial offsets relative to PrimaryPart
+		if not IllusionaryFishOffsets[model] then
+			local offsets = {}
+			local ring = model:FindFirstChild("Ring")
+			local eyeRing = model:FindFirstChild("EyeRing")
+			
+			if ring then
+				local pivot = ring:IsA("Model") and ring:GetPivot() or ring.CFrame
+				offsets.Ring = model.PrimaryPart.CFrame:ToObjectSpace(pivot)
+			end
+			if eyeRing then
+				local pivot = eyeRing:IsA("Model") and eyeRing:GetPivot() or eyeRing.CFrame
+				offsets.EyeRing = model.PrimaryPart.CFrame:ToObjectSpace(pivot)
+			end
+			IllusionaryFishOffsets[model] = offsets
+		end
+		
+		local offsets = IllusionaryFishOffsets[model]
+		local t = os.clock()
+		local baseCF = model.PrimaryPart.CFrame
+		
+		local ring = model:FindFirstChild("Ring")
+		if ring and offsets.Ring then
+			local tilt = math.rad(10)
+			local angle = math.rad(90) * t
+			local targetCF = baseCF * offsets.Ring * CFrame.Angles(tilt, 0, 0) * CFrame.Angles(0, angle, 0)
+			if ring:IsA("Model") then
+				ring:PivotTo(targetCF)
+			elseif ring:IsA("BasePart") then
+				ring.CFrame = targetCF
+			end
+		end
+		
+		local eyeRing = model:FindFirstChild("EyeRing")
+		if eyeRing and offsets.EyeRing then
+			local tilt = math.rad(-15)
+			local angle = math.rad(60) * t
+			local targetCF = baseCF * offsets.EyeRing * CFrame.Angles(tilt, 0, 0) * CFrame.Angles(0, angle, 0)
+			if eyeRing:IsA("Model") then
+				eyeRing:PivotTo(targetCF)
+			elseif eyeRing:IsA("BasePart") then
+				eyeRing.CFrame = targetCF
+			end
+		end
+	end
 end
 
 
@@ -851,7 +936,9 @@ function FishController.OnHeartbeat(dt)
 		local FishStateRelay = Remotes:WaitForChild("FishStateRelay", 5)
 		if FishStateRelay then
 			FishStateRelay.OnClientEvent:Connect(function(uid, stateData)
-				remoteFishStates[uid] = stateData
+				if typeof(uid) == "number" then
+					remoteFishStates[uid] = stateData
+				end
 			end)
 		end
 	end
@@ -876,6 +963,9 @@ function FishController.OnHeartbeat(dt)
 				end
 				
 				if not isVisible then continue end
+				
+				local fId = model:GetAttribute("FishID") or "Basic Fish"
+				AnimateFishModel(model, fId, dt)
 
 				-- Basic Wander State (Default)
 				local state = _G.FishStates and _G.FishStates[model]
@@ -931,12 +1021,6 @@ function FishController.OnHeartbeat(dt)
 					local ownerRoot = ownerChar and ownerChar.PrimaryPart
 					
 					local isAtTank = false
-					
-					if ownerRoot and tank and tank:FindFirstChild("Spawn") then
-						if (ownerRoot.Position - tank.Spawn.Position).Magnitude < 25 then
-							isAtTank = true
-						end
-					end
 					
 					-- If owner is essentially missing or offline, default to tank if exists
 					if not ownerRoot and tank then isAtTank = true end
@@ -1037,22 +1121,6 @@ function FishController.OnHeartbeat(dt)
 	local tankWanderCenter = nil
 	local tankWanderSize = nil
 	
-	if myTank then
-		local spawnPart = myTank:FindFirstChild("Spawn")
-		if spawnPart then
-			local dist = (char.PrimaryPart.Position - spawnPart.Position).Magnitude
-			if dist < 30 then -- Increased radius to capture aquarium area better
-				isInTankMode = true
-				-- Prefer "Wander" part name as requested
-				local wanderPart = myTank:FindFirstChild("Wander") or myTank:FindFirstChild("FishWander")
-				if wanderPart and wanderPart:IsA("BasePart") then
-					tankWanderCenter = wanderPart.Position
-					tankWanderSize = wanderPart.Size
-				end
-			end
-		end
-	end
-	
 	-- if isInTankMode and tankWanderCenter then
 	--	targetRootCF = tankWanderCenter -- Swarm anchors to tank center
 	-- end
@@ -1096,6 +1164,8 @@ function FishController.OnHeartbeat(dt)
 		
 		local fId = model:GetAttribute("FishID") or "Basic Fish"
 		local config = FishConfig.Fish[fId]
+		
+		AnimateFishModel(model, fId, dt)
 		
 		-- Clear conversion state when not converting
 		if not isCurrentlyConverting then
@@ -1475,8 +1545,18 @@ function FishController.OnHeartbeat(dt)
 					end
 					
 					-- Restore scale safely back to normal size
-					ts:Create(scaleNum, TweenInfo.new(0.5), {Value = originalScale}):Play()
-					task.wait(0.5)
+					local restoreTween = ts:Create(scaleNum, TweenInfo.new(0.5), {Value = originalScale})
+					restoreTween:Play()
+					restoreTween.Completed:Wait() -- Ensure the tween actually finishes
+					
+					if model and model.Parent then
+						model:ScaleTo(originalScale) -- Hard guarantee
+					end
+					
+					if scaleNum then
+						scaleNum:Destroy()
+					end
+					
 					state.PerformingAbility = false
 				end)
 				
@@ -1604,6 +1684,41 @@ function FishController.OnHeartbeat(dt)
 				collectTimeMult = 1 / boost
 			end
 		end
+		-- PASSIVE: _my.safespace. (100% movespeed/gather speed in Sanctuary)
+		if cfg and cfg.Passive == "_my.safespace." then
+			local passiveCfg = FishConfig.Passives["_my.safespace."]
+			local sanctuaryRadius = passiveCfg and passiveCfg.SanctuaryRadius or 15
+			local speedMultPassive = passiveCfg and passiveCfg.SpeedMultiplier or 2
+			local gatherMultPassive = passiveCfg and passiveCfg.GatherMultiplier or 2
+			
+			local VFXController = require(script.Parent.VFXController)
+			local inSanctuary = false
+			local activeSanctuaries = VFXController.ActiveSanctuaryVFX
+			if activeSanctuaries then
+				for _, sanc in pairs(activeSanctuaries) do
+					local sp = nil
+					if sanc.Model then
+						if sanc.Model:IsA("Model") and sanc.Model.PrimaryPart then
+							sp = sanc.Model.PrimaryPart.Position
+						elseif sanc.Model:IsA("BasePart") then
+							sp = sanc.Model.Position
+						end
+					end
+					if not sp and sanc.Position then
+						sp = sanc.Position
+					end
+					if sp and (currentPos - sp).Magnitude <= sanctuaryRadius then
+						inSanctuary = true
+						break
+					end
+				end
+			end
+			
+			if inSanctuary then
+				moveSpeed = moveSpeed * speedMultPassive
+				collectTimeMult = collectTimeMult / gatherMultPassive
+			end
+		end
 		
 		state.CurrentCollectTimeMult = collectTimeMult -- Store for gathering logic
 		
@@ -1649,7 +1764,8 @@ function FishController.OnHeartbeat(dt)
 			
 			-- 3. Combat Mode Transitions
 			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
-				if state.State == S_MOVING or state.State == S_GATHERING or state.State == S_IDLE then
+				-- Drop other tasks like delivering/retreating to prioritize combat (excluding active conversion)
+				if state.State ~= S_CONVERT_TO_PLAYER and state.State ~= S_CONVERT_TO_SLOT and state.State ~= S_CONVERT_WAIT and state.State ~= S_ORBIT_ATTACK and state.State ~= S_CASTING_ABILITY then
 					state.State = S_ORBIT_ATTACK
 					state.Target = nil
 				end
@@ -1818,8 +1934,8 @@ function FishController.OnHeartbeat(dt)
 			
 		-- MOVING: Fly to food
 		elseif state.State == S_MOVING then
-			if state.Target then
-				-- Validate capacity while moving? Optional.
+			local localMax = (maxCapacity > 0 and maxCapacity) or 5
+			if state.Target and currentPlankton < localMax then
 				-- If valid target
 				local dest = state.Target.Position + Vector3.new(0, 2, 0)
 				local dist = (dest - model.PrimaryPart.Position).Magnitude
@@ -1837,25 +1953,44 @@ function FishController.OnHeartbeat(dt)
 				state.State = S_IDLE
 			end
 			
-		-- ORBIT ATTACK: Orbit mob and attack
+		-- ORBIT ATTACK: Hover around mob and attack with lunges
 		elseif state.State == S_ORBIT_ATTACK then
 			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
-				-- Movement target
 				local mobRoot = _G.OrbitTarget.PrimaryPart
 				local center = mobRoot.Position
+				
+				-- 1. Base hover position (above the mob and spread in a formation)
 				local goldenAngle = 2.39996
 				local orbitRadius = 8 + (math.sqrt(numericIndex) * 1.5)
-				local orbitSpeed = 4.0
-				local orbitAngle = (numericIndex * goldenAngle) + (time * orbitSpeed)
-				local offset = Vector3.new(math.cos(orbitAngle) * orbitRadius, 2 + math.sin(time * 2 + numericIndex), math.sin(orbitAngle) * orbitRadius)
-				targetPos = center + offset -- Orbit mob
+				local orbitAngle = numericIndex * goldenAngle
 				
-				-- Attack & Energy Logic
+				local homeX = math.cos(orbitAngle) * orbitRadius
+				local homeZ = math.sin(orbitAngle) * orbitRadius
+				local homeY = 5 + (numericIndex % 4) * 1.33 -- Elevated above the mob (layered 5-9 studs)
+				
+				-- Add gentle drift noise
+				local seed = numericIndex * 1337
+				local floatSpeed = 0.3
+				local floatRange = 1.5
+				local driftX = math.noise(time * floatSpeed, seed, 0) * floatRange
+				local driftY = math.noise(time * floatSpeed, seed, 100) * floatRange
+				local driftZ = math.noise(time * floatSpeed, seed, 200) * floatRange
+				
+				local hoverPos = center + Vector3.new(homeX + driftX, homeY + driftY, homeZ + driftZ)
+				
+				-- 2. Attack check & Lunge triggering
 				local atkSpeed = state.Stats.AttackSpeed or 1.0
 				if not state.NextAttackTime then state.NextAttackTime = time + (1.0 / atkSpeed) end
 				
 				if time >= state.NextAttackTime then
 					state.NextAttackTime = time + (1.0 / atkSpeed)
+					
+					-- Trigger the visual lunge!
+					state.IsLunging = true
+					state.LungeStart = time
+					state.LungeDuration = 0.6 -- Fast lunge and swift return
+					state.LungeStartPos = currentPos
+					state.LungeSign = (math.random() < 0.5) and 1 or -1
 					
 					-- Gain Half Energy
 					if not state.Energy then state.Energy = 0 end
@@ -1903,9 +2038,57 @@ function FishController.OnHeartbeat(dt)
 								state.State = S_CASTING_ABILITY
 								state.Energy = 0
 								state.NextAttackTime = nil -- Reset attack timer for when it comes back
+								state.IsLunging = false -- Cancel standard lunge to cast ability
 							end
 						end
 					end
+				end
+				
+				-- 3. Calculate position based on lunge state
+				if state.IsLunging then
+					local elapsed = time - state.LungeStart
+					local u = elapsed / state.LungeDuration
+					
+					if u >= 1.0 then
+						-- Lunge finished!
+						state.IsLunging = false
+						targetPos = hoverPos
+					else
+						-- Curve math: J-curve hook trajectory
+						local function getLungePos(progress)
+							local direction = (center - hoverPos)
+							local normal = Vector3.new(-direction.Z, 0, direction.X)
+							if normal.Magnitude > 0.001 then
+								normal = normal.Unit
+							else
+								normal = Vector3.new(0, 0, 1)
+							end
+							normal = normal * (state.LungeSign or 1)
+							
+							if progress <= 0.35 then
+								-- Fast lunge towards mob
+								local t1 = progress / 0.35
+								local p = hoverPos:Lerp(center, t1)
+								local side = math.sin(t1 * math.pi) * 1.5
+								return p + normal * side
+							else
+								-- Hook return arcing back
+								local t2 = (progress - 0.35) / 0.65
+								local p = center:Lerp(hoverPos, t2)
+								local side = math.sin(t2 * math.pi) * 4.0
+								return p + normal * side
+							end
+						end
+						
+						-- Calculate current pos along the hook curve
+						targetPos = getLungePos(u)
+						
+						-- Calculate heading (tangent of movement) using look-ahead step
+						local aheadPos = getLungePos(math.min(1.0, u + 0.02))
+						state.LungeHeading = (aheadPos - targetPos)
+					end
+				else
+					targetPos = hoverPos
 				end
 			else
 				state.State = S_IDLE
@@ -1914,7 +2097,8 @@ function FishController.OnHeartbeat(dt)
 		-- CASTING ABILITY: Fly to center of mob and trigger
 		elseif state.State == S_CASTING_ABILITY then
 			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
-				local center = _G.OrbitTarget.PrimaryPart.Position
+				local targetPart = _G.OrbitTarget.PrimaryPart
+				local center = targetPart.Position
 				targetPos = center
 				
 				local dist = (center - model.PrimaryPart.Position).Magnitude
@@ -1938,7 +2122,11 @@ function FishController.OnHeartbeat(dt)
 				targetPos = state.Target.Position
 				
 				if time >= state.Timer then
-					FishHarvestEvent:FireServer(state.FishIndex, state.Target)
+					local localMax = (maxCapacity > 0 and maxCapacity) or 5
+					if currentPlankton < localMax then
+						FishHarvestEvent:FireServer(state.FishIndex, state.Target)
+						currentPlankton = currentPlankton + (state.Stats.GatherAmount or 1)
+					end
 					
 					-- Rabbit Fish SFX: Collect (1/40)
 					local fId = model:GetAttribute("FishID")
@@ -1973,11 +2161,11 @@ function FishController.OnHeartbeat(dt)
 						local boostMult = 1.0 + (playerData and playerData.Stats and playerData.Stats.FishEnergyGainBoost or 0)
 						energyGain = energyGain * boostMult
 						
-						-- PASSIVE: Mitosis (Mirror Fish) - 1/70 Chance
+						-- PASSIVE: Mitosis (Mirror Fish) - Every 10 collects
 						if cfg and cfg.Passive == "Mitosis" then
-							local passiveCfg = FishConfig.Passives.Mitosis
-							local chance = passiveCfg and passiveCfg.Chance or 70
-							if rng:NextInteger(1, chance) == 1 then
+							state.MitosisCollects = (state.MitosisCollects or 0) + 1
+							if state.MitosisCollects >= 10 then
+								state.MitosisCollects = 0
 								-- Trigger Duplicate
 								local TriggerAbilityEvent = Remotes:WaitForChild("TriggerAbilityEvent")
 								TriggerAbilityEvent:FireServer(numericIndex, fId, model.PrimaryPart.Position, "Mitosis")
@@ -2109,14 +2297,25 @@ function FishController.OnHeartbeat(dt)
 			end
 			destination = state.TankWanderTarget
 		elseif _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
-			-- ORBIT TARGET: Orbit around a mob (combat)
-			local center = _G.OrbitTarget.PrimaryPart.Position
+			-- ORBIT TARGET: Hover around a mob (combat)
+			local targetPart = _G.OrbitTarget.PrimaryPart
+			local center = targetPart.Position
 			local goldenAngle = 2.39996
 			local orbitRadius = 8 + (math.sqrt(numericIndex) * 1.5)
-			local orbitSpeed = 4.0
-			local orbitAngle = (numericIndex * goldenAngle) + (os.clock() * orbitSpeed)
-			local offset = Vector3.new(math.cos(orbitAngle) * orbitRadius, 2 + math.sin(os.clock() * 2 + numericIndex), math.sin(orbitAngle) * orbitRadius)
-			destination = center + offset
+			local orbitAngle = numericIndex * goldenAngle
+			
+			local homeX = math.cos(orbitAngle) * orbitRadius
+			local homeZ = math.sin(orbitAngle) * orbitRadius
+			local homeY = 5 + (numericIndex % 4) * 1.33 -- Layered 5-9 studs
+			
+			local seed = numericIndex * 1337
+			local floatSpeed = 0.3
+			local floatRange = 1.5
+			local driftX = math.noise(time * floatSpeed, seed, 0) * floatRange
+			local driftY = math.noise(time * floatSpeed, seed, 100) * floatRange
+			local driftZ = math.noise(time * floatSpeed, seed, 200) * floatRange
+			
+			destination = center + Vector3.new(homeX + driftX, homeY + driftY, homeZ + driftZ)
 			isDirectMovement = true
 		else
 			-- FORMATION: Stationary around player (No Wandering)
@@ -2177,15 +2376,29 @@ function FishController.OnHeartbeat(dt)
 		local travelVec = (finalNewPos - currentPos)
 		local targetLookDir = state.LastFacingDir or model.PrimaryPart.CFrame.LookVector
 		
-		-- If moving, face the direction of travel (including pitch for gathering)
-		if travelVec.Magnitude > 0.05 then
-			targetLookDir = SafeUnit(travelVec)
-			-- Keep full 3D direction (no flattening) so fish can look down/up
-		elseif isFormation then
-			-- If idle/in formation, face toward the player
-			local toPlayer = (rootPos - currentPos)
-			if toPlayer.Magnitude > 0.1 then
-				targetLookDir = SafeUnit(toPlayer)
+		-- If in S_ORBIT_ATTACK and lunging, face the movement vector of the lunge
+		if state.State == S_ORBIT_ATTACK and state.IsLunging and state.LungeHeading then
+			targetLookDir = SafeUnit(state.LungeHeading)
+		-- If in S_ORBIT_ATTACK and not lunging, point nose-down directly at the mob
+		elseif state.State == S_ORBIT_ATTACK and not state.IsLunging then
+			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
+				local mobRoot = _G.OrbitTarget.PrimaryPart
+				local toMob = (mobRoot.Position - finalNewPos)
+				if toMob.Magnitude > 0.1 then
+					targetLookDir = SafeUnit(toMob)
+				end
+			end
+		else
+			-- If moving, face the direction of travel (including pitch for gathering)
+			if travelVec.Magnitude > 0.05 then
+				targetLookDir = SafeUnit(travelVec)
+				-- Keep full 3D direction (no flattening) so fish can look down/up
+			elseif isFormation then
+				-- If idle/in formation, face toward the player
+				local toPlayer = (rootPos - currentPos)
+				if toPlayer.Magnitude > 0.1 then
+					targetLookDir = SafeUnit(toPlayer)
+				end
 			end
 		end
 		-- Otherwise keep current facing (stationary, not in formation)

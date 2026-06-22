@@ -69,6 +69,20 @@ ShopConfig.Shops = {
 			CornerRadius = UDim.new(0, 12),
 		},
 	},
+	["ZooplanktonMachine"] = {
+		ShopName = "Zooplankton Machine",
+		Range = 25,
+		Theme = {
+			BackgroundColor = Color3.fromRGB(20, 40, 50),
+			HeaderColor = Color3.fromRGB(30, 55, 70),
+			AccentColor = Color3.fromRGB(0, 200, 255),
+			TextColor = Color3.fromRGB(200, 255, 255),
+			ButtonColor = Color3.fromRGB(0, 150, 200),
+			ButtonHoverColor = Color3.fromRGB(0, 180, 240),
+			Font = Enum.Font.GothamBold,
+			CornerRadius = UDim.new(0, 12),
+		}
+	},
 }
 
 return ShopConfig

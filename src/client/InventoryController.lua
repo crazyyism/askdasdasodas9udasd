@@ -23,7 +23,12 @@ function InventoryController.Start()
 		local mainFrame = mainGui:WaitForChild("Main", 10)
 		if not mainFrame then return end
 		
-		local invFrame = mainFrame:WaitForChild("InventoryFrame")
+		local invFrame = player.PlayerGui:FindFirstChild("InventoryFrame", true)
+		if not invFrame then 
+			invFrame = mainGui:WaitForChild("InventoryFrame", 10)
+		end
+		if not invFrame then return end
+		
 		local scrolling = invFrame:WaitForChild("ScrollingFrame")
 		local template = scrolling:WaitForChild("TemplateMaterial")
 		
@@ -578,17 +583,58 @@ function InventoryController.EndDrag(input)
 				local feedCount = tonumber(feedAmount) or 1
 				local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 				local ProcessEggDrop = Remotes:WaitForChild("ProcessEggDrop")
-				local success, res = ProcessEggDrop:InvokeServer(aquarium, itemName, targetNumericId, feedCount)
+				
+				local fishSchool = (InventoryController.PlayerData and InventoryController.PlayerData.FishSchool) or {}
+				local startFishObj = fishSchool[tostring(targetNumericId)] or fishSchool[tonumber(targetNumericId)]
+				local startFishName = startFishObj and startFishObj.Name or "None"
+				
+				local success, res, consumedCount = ProcessEggDrop:InvokeServer(aquarium, itemName, targetNumericId, feedCount)
 				
 				if success then
+					local itemCfg = EquipmentConfig.Eggs[itemName]
+					local isEviction = itemCfg and itemCfg.IsEviction
+					local finalConsumed = consumedCount or feedCount
+					
+					InventoryController.DecrementLocalInventory(itemName, finalConsumed)
+					
+					if isEviction then
+						local NotifierController = require(script.Parent:WaitForChild("NotifierController"))
+						if NotifierController then
+							NotifierController:Notify("Evicted " .. startFishName .. "!", Color3.fromRGB(255, 50, 50))
+						end
+						
+						local facePart = slotInstance:FindFirstChild("FishFace") or slotInstance:FindFirstChildWhichIsA("BasePart")
+						if facePart then
+							for _, d in ipairs(facePart:GetChildren()) do
+								if d:IsA("Decal") then d.Texture = "" end
+							end
+							if facePart:IsA("BasePart") then
+								facePart.Color = Color3.fromRGB(163, 162, 165)
+							end
+						end
+						
+						return
+					end
+					
 					task.spawn(InventoryController.PlayHatchAnimation, slotInstance)
 					
-					-- Directly subtract chunked amount 
-					InventoryController.DecrementLocalInventory(itemName, feedCount)
+					local settings = InventoryController.PlayerData and InventoryController.PlayerData.Settings or {}
+					local hasOptionOn = settings.UntilLegendary or settings.UntilMythic
+					local isFeed = itemCfg and itemCfg.IsFeed
 					
-					InventoryController.ShowHatchedUI(res, itemName, targetNumericId, aquarium, feedCount)
-				else
-					warn("InventoryController: Hatch failed - " .. tostring(res))
+					if (hasOptionOn or finalConsumed > 1) and not isFeed then
+						local NotifierController = require(script.Parent:WaitForChild("NotifierController"))
+						if NotifierController then
+							local displayItemName = itemName
+							if finalConsumed > 1 and itemName:sub(-3):lower() == "egg" then
+								displayItemName = itemName .. "s"
+							end
+							local endFishName = res and res.Name or "Unknown"
+							NotifierController:Notify("Used " .. finalConsumed .. " " .. displayItemName .. "! (" .. startFishName .. " -> " .. endFishName .. ")", Color3.fromRGB(255, 200, 50))
+						end
+					end
+					
+					InventoryController.ShowHatchedUI(res, itemName, targetNumericId, aquarium, finalConsumed)
 				end
 			end
 			
@@ -606,7 +652,6 @@ function InventoryController.EndDrag(input)
 			
 			if isFeed then
 				if not occupiedValue then
-					warn("InventoryController: This item requires an existing fish!")
 					InventoryController.HideSlotIndicators()
 					dragging = nil
 					return
@@ -616,7 +661,6 @@ function InventoryController.EndDrag(input)
 			elseif itemRequiresFish then
 				if not occupiedValue then
 					-- Cannot use on empty slot
-					warn("InventoryController: This item requires an existing fish!")
 					InventoryController.HideSlotIndicators()
 					dragging = nil
 					return
@@ -636,7 +680,6 @@ function InventoryController.EndDrag(input)
 			-- Cleanup visual indicators immediately since drag is effectively over (waiting for confirmation)
 			InventoryController.HideSlotIndicators()
 		else
-			print("EndDrag: Drop failed. Slot:", slotInstance and slotInstance.Name or "nil", "Aquarium:", aquarium and aquarium.Name or "nil")
 			InventoryController.HideSlotIndicators()
 		end
 		
@@ -839,9 +882,16 @@ function InventoryController.ShowHatchedUI(fishData, lastItemName, lastSlotId, l
 		
 
 		-- Logic: Show if we have more
-		if InventoryController.PlayerData and InventoryController.PlayerData.Inventory then
-			for _, item in ipairs(InventoryController.PlayerData.Inventory) do
-				if item == lastItemName then remainingCount += 1 end
+		if lastItemName == "Pearl" then
+			remainingCount = (InventoryController.PlayerData and InventoryController.PlayerData.Pearls) or 0
+		elseif InventoryController.PlayerData and InventoryController.PlayerData.Inventory then
+			local inv = InventoryController.PlayerData.Inventory
+			for k, v in pairs(inv) do
+				if type(k) == "number" then
+					if v == lastItemName then remainingCount += 1 end
+				else
+					if k == lastItemName then remainingCount += v end
+				end
 			end
 		end
 		
@@ -849,31 +899,77 @@ function InventoryController.ShowHatchedUI(fishData, lastItemName, lastSlotId, l
 		if remainingCount > 0 then shouldShow = true end
 		
 		if shouldShow then
-			useAgainFrame.Visible = true
+			local isMythic = fishData and fishData.Rarity == "Mythic"
+			
+			if isMythic then
+				useAgainFrame.Visible = false
+				task.delay(1.0, function()
+					if hatchFrame.Visible then
+						useAgainFrame.Visible = true
+					end
+				end)
+			else
+				useAgainFrame.Visible = true
+			end
+			
 			local btn = useAgainFrame:FindFirstChild("ConfirmButton")
 			
 			if btn then
 				-- Cleanup old connection
 				if InventoryController.UseAgainConn then InventoryController.UseAgainConn:Disconnect() end
 				
+				local clickEnabled = not isMythic
+				if isMythic then
+					task.delay(1.0, function()
+						clickEnabled = true
+					end)
+				end
+				
 				InventoryController.UseAgainConn = btn.MouseButton1Click:Connect(function()
+					if not clickEnabled then return end
+					
 					-- Guard: disconnect immediately so rapid clicks can't re-trigger
 					if InventoryController.UseAgainConn then
 						InventoryController.UseAgainConn:Disconnect()
 						InventoryController.UseAgainConn = nil
 					end
+					
+					-- Capture starting fish name
+					local fishSchool = (InventoryController.PlayerData and InventoryController.PlayerData.FishSchool) or {}
+					local startFishObj = fishSchool[tostring(lastSlotId)] or fishSchool[tonumber(lastSlotId)]
+					local startFishName = startFishObj and startFishObj.Name or "None"
+					
 					-- Call Server
 					local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 					local ProcessEggDrop = Remotes:WaitForChild("ProcessEggDrop")
-					local success, res = ProcessEggDrop:InvokeServer(lastAquarium, lastItemName, lastSlotId)
+					local success, res, consumedCount = ProcessEggDrop:InvokeServer(lastAquarium, lastItemName, lastSlotId)
 					
 					if success then
 						task.spawn(function()
-							InventoryController.DecrementLocalInventory(lastItemName)
+							local finalConsumed = consumedCount or 1
+							InventoryController.DecrementLocalInventory(lastItemName, finalConsumed)
+							
+							-- Notification for consumed amount and from-to fish
+							local settings = InventoryController.PlayerData and InventoryController.PlayerData.Settings or {}
+							local hasOptionOn = settings.UntilLegendary or settings.UntilMythic
+							local itemCfg = EquipmentConfig.Eggs[lastItemName]
+							local isFeed = itemCfg and itemCfg.IsFeed
+							
+							if (hasOptionOn or finalConsumed > 1) and not isFeed then
+								local NotifierController = require(script.Parent:WaitForChild("NotifierController"))
+								if NotifierController then
+									local displayItemName = lastItemName
+									if finalConsumed > 1 and lastItemName:sub(-3):lower() == "egg" then
+										displayItemName = lastItemName .. "s"
+									end
+									local endFishName = res and res.Name or "Unknown"
+									NotifierController:Notify("Used " .. finalConsumed .. " " .. displayItemName .. "! (" .. startFishName .. " -> " .. endFishName .. ")", Color3.fromRGB(255, 200, 50))
+								end
+							end
+							
 							InventoryController.ShowHatchedUI(res, lastItemName, lastSlotId, lastAquarium)
 						end)
 					else
-						warn("InventoryController: Use Again failed - " .. tostring(res))
 						useAgainFrame.Visible = false
 					end
 				end)

@@ -6,6 +6,21 @@ local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
 
 local FieldService = {}
 
+local function getFieldFolder(fieldName)
+	if not fieldName then return nil end
+	local folder = Workspace:FindFirstChild(fieldName)
+	if folder then return folder end
+	
+	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	for _, child in ipairs(Workspace:GetChildren()) do
+		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+		if childClean == cleanName then
+			return child
+		end
+	end
+	return nil
+end
+
 -- Store regeneration data: { [Part] = { MaxCapacity = 5, NextRegen = 0 } }
 local activeFlowers = {}
 
@@ -147,7 +162,7 @@ end
 function FieldService.Start()
 	-- Find all defined fields in Workspace
 	for fieldName, _ in pairs(ResourceConfig.Fields) do
-		local folder = Workspace:FindFirstChild(fieldName)
+		local folder = getFieldFolder(fieldName)
 		if folder then
 			FieldService.RegisterField(folder, fieldName)
 		else
@@ -213,7 +228,7 @@ function FieldService.Start()
 			-- Collect all eligible fully grown algae parts
 			local eligibleParts = {}
 			for fieldName, _ in pairs(ResourceConfig.Fields) do
-				local folder = Workspace:FindFirstChild(fieldName)
+				local folder = getFieldFolder(fieldName)
 				if folder then
 					for _, child in ipairs(folder:GetChildren()) do
 						if child:IsA("BasePart") then

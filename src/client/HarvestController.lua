@@ -20,6 +20,21 @@ local harvestButton = nil
 local abilityButton = nil
 local activeAbilityConfig = nil
 
+local function getFieldFolder(fieldName)
+	if not fieldName then return nil end
+	local folder = game.Workspace:FindFirstChild(fieldName)
+	if folder then return folder end
+	
+	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	for _, child in ipairs(game.Workspace:GetChildren()) do
+		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+		if childClean == cleanName then
+			return child
+		end
+	end
+	return nil
+end
+
 if player.Character then
 	mouse.TargetFilter = player.Character
 end
@@ -74,7 +89,7 @@ function HarvestController.attemptHarvest()
 	
 	-- Iterate through all known fields to find nearest flower
 	for fieldName, _ in pairs(ResourceConfig.Fields) do
-		local fieldFolder = game.Workspace:FindFirstChild(fieldName)
+		local fieldFolder = getFieldFolder(fieldName)
 		if fieldFolder then
 			for _, part in ipairs(fieldFolder:GetChildren()) do
 				if part:IsA("BasePart") and part.Transparency < 1 then
@@ -83,11 +98,12 @@ function HarvestController.attemptHarvest()
 					local dz = part.Position.Z - rootPos.Z
 					local distXZ = math.sqrt(dx*dx + dz*dz)
 					
-					-- Vastly loosen the tolerance range away from strictly "standing on the block"
-					-- The server legally allows 20 studs, so 15 locally gives perfect native reach!
+					-- Tighten the tolerance range so the player must physically stand in the reef
 					local dy = math.abs(part.Position.Y - rootPos.Y)
 					
-					if distXZ <= 15 and dy < 15 then
+					-- 4.5 studs provides enough leniency to collect while walking between blocks
+					-- without magically sucking up algae from the sand.
+					if distXZ <= 4.5 and dy < 15 then
 						-- Valid "Near"
 						if distXZ < closestDist then
 							closestDist = distXZ
@@ -181,16 +197,17 @@ function HarvestController.attemptRainHarvest(radius, callback, exclusionMap)
 	
 	local VFXController = require(script.Parent.VFXController)
 	
-	local closestMob = _G.OrbitTarget and _G.OrbitTarget.PrimaryPart
+	local closestMob = _G.OrbitTarget and (_G.OrbitTarget:FindFirstChild("Hitbox") or _G.OrbitTarget.PrimaryPart)
 	if not closestMob then
 		local bestDist = 100
 		for _, child in ipairs(workspace:GetChildren()) do
 			if child:FindFirstChild("Health") and child:FindFirstChild("Level") and child.PrimaryPart then
 				if child:GetAttribute("TargetingPlayer") == true then
-					local dist = (child.PrimaryPart.Position - startPos).Magnitude
+					local targetPart = child:FindFirstChild("Hitbox") or child.PrimaryPart
+					local dist = (targetPart.Position - startPos).Magnitude
 					if dist < bestDist then
 						bestDist = dist
-						closestMob = child.PrimaryPart
+						closestMob = targetPart
 					end
 				end
 			end
@@ -476,6 +493,49 @@ local function startHarvestLoop()
 				-- Force restart to sync with gather speed
 				if myHarvestAnim.IsPlaying then myHarvestAnim:Stop() end
 				myHarvestAnim:Play()
+			end
+			
+			if initialToolName == "Eviction" then
+				task.spawn(function()
+					local char = player.Character
+					local rootPos = char and char.PrimaryPart and char.PrimaryPart.Position
+					
+					if rootPos then
+						local AquariumController = require(script.Parent.AquariumController)
+						local myTank = AquariumController.GetMyAquarium()
+						if myTank then
+							local closestFish = nil
+							local closestDist = 15
+							
+							for _, child in ipairs(workspace:GetChildren()) do
+								if child.Name:match("^Fish_" .. player.UserId .. "_") and child:FindFirstChild("PrimaryPart") then
+									local dist = (child.PrimaryPart.Position - rootPos).Magnitude
+									if dist < closestDist then
+										closestDist = dist
+										closestFish = child
+									end
+								end
+							end
+							
+							if closestFish then
+								local Remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
+								local EvictFishEvent = Remotes:FindFirstChild("EvictFishEvent")
+								if EvictFishEvent then
+									local indexStr = closestFish.Name:match("Fish_%d+_(.+)")
+									if indexStr then
+										EvictFishEvent:FireServer(indexStr)
+										
+										local hl = Instance.new("Highlight")
+										hl.Adornee = closestFish
+										hl.FillColor = Color3.fromRGB(255, 0, 0)
+										hl.Parent = closestFish
+										game:GetService("Debris"):AddItem(hl, 0.5)
+									end
+								end
+							end
+						end
+					end
+				end)
 			end
 			
 			if initialToolName == "Sun Staff" or initialToolName == "SunStaff" then
@@ -813,6 +873,11 @@ local function startHarvestLoop()
 				_G.SunkissedComboTotal = (_G.SunkissedComboTotal or 0) + 1
 				_G.SunkissedLastSwipe = os.clock()
 				
+				local comboPhase = _G.SunkissedComboTotal % 3
+				if VFXReplication then
+					VFXReplication:FireServer("SunkissedMelee", nil, comboPhase)
+				end
+				
 				-- Handle the FirstHit VFX logic
 				if _G.SunkissedComboTotal % 3 == 1 then
 					task.delay(0.15, function()
@@ -994,6 +1059,10 @@ function HarvestController.attemptSunkissedAbility()
 	isAbilityActive = true
 	isHolding = false
 	SetHarvesting(false)
+	
+	if VFXReplication then
+		VFXReplication:FireServer("SunkissedAbility")
+	end
 	
 	local char = player.Character
 	if not char then isAbilityActive = false return end

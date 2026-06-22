@@ -79,8 +79,8 @@ local function generateQuests()
         },
         OceanicOverlord = {
             Goals = {["MaxAlgaePerSecond"]=2500000, ["Crystal Reef"]=50000000000, ["AbilitiesCommitted"]=25000},
-            Rewards = {BiomassAmount=150000000000, Items={["Mythic Egg"]=1}},
-            Dialog = {"This is it. The culmination of your lifetime in these waters.", "I am asking for 50 Billion algae... and speeds exceeding 2.5 Million per second.", "Should you succeed, I will name you the Overlord, and grant you a legendary Mythic Egg."}
+            Rewards = {BiomassAmount=150000000000, Items={["Heavensent Egg"]=1}},
+            Dialog = {"This is it. The culmination of your lifetime in these waters.", "I am asking for 50 Billion algae... and speeds exceeding 2.5 Million per second.", "Should you succeed, I will name you the Overlord, and grant you a legendary Heavensent Egg."}
         }
     }
 

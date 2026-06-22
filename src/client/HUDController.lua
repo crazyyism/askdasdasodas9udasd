@@ -255,35 +255,78 @@ function HUDController.Start()
     local mainFrame = nil
     
     local function RebindSlideLogic()
-        local mainGui = player.PlayerGui:FindFirstChild("Main")
-        if not mainGui then return end
-        mainFrame = mainGui:FindFirstChild("Main")
+        print("[HUD DEBUG] RebindSlideLogic started.")
+        local mainGui = player.PlayerGui:WaitForChild("Main", 10)
+        if not mainGui then print("[HUD DEBUG] Main Gui not found after 10s!") return end
+        
+        local newMainFrame = mainGui:FindFirstChild("Main")
+        if not newMainFrame then print("[HUD DEBUG] newMainFrame not found!") return end
+        
+        -- Prevent double binding if ResetOnSpawn is false
+        if HUDController.BoundMainFrame == newMainFrame then
+            print("[HUD DEBUG] Already bound to this exact frame! Returning.")
+            return 
+        end
+        print("[HUD DEBUG] Binding new frame!")
+        HUDController.BoundMainFrame = newMainFrame
+        mainFrame = newMainFrame
         
         if mainFrame then
             local btnHolders = mainFrame:FindFirstChild("ButtonHolders")
-            local invFrame = mainFrame:FindFirstChild("InventoryFrame")
+            print("[HUD DEBUG] btnHolders found:", btnHolders ~= nil)
             
-            if btnHolders and invFrame then
+            if btnHolders then
                 -- CRITICAL FIX: Ensure Main frame does NOT sink input (blocks mobile camera)
                 if mainFrame then mainFrame.Active = false end
                 
+                -- Support frames being anywhere in the UI hierarchy
+                local function findFrame(name)
+                    return player.PlayerGui:FindFirstChild(name, true)
+                end
+                
+                local invFrame = findFrame("InventoryFrame")
+                local statsFrame = findFrame("StatisticsFrame")
+                local questFrame = findFrame("QuestFrame")
+                local indexFrame = findFrame("IndexFrame")
+                
+                print("[HUD DEBUG] Found frames:", invFrame ~= nil, statsFrame ~= nil, questFrame ~= nil, indexFrame ~= nil)
+                
                 local invBtn = btnHolders:FindFirstChild("Inventory")
                 local statsBtn = btnHolders:FindFirstChild("Statistics")
-                local statsFrame = mainFrame:FindFirstChild("StatisticsFrame")
                 local questBtn = btnHolders:FindFirstChild("quests") or btnHolders:FindFirstChild("Quests") or btnHolders:FindFirstChild("Quest")
-                local questFrame = mainFrame:FindFirstChild("QuestFrame")
                 local indexBtn = btnHolders:FindFirstChild("Index")
-                local indexFrame = mainFrame:FindFirstChild("IndexFrame")
+                
+                print("[HUD DEBUG] Found buttons:", invBtn ~= nil, statsBtn ~= nil, questBtn ~= nil, indexBtn ~= nil)
                 
                 -- Note: Active Frame state resets on Rebind (UI is usually closed on reset anyway)
                 HUDController.ActiveFrame = nil 
                 
-                -- Shared Config
-                local hiddenPos = UDim2.new(-1, 0, 1, 0)
-                local openPos = UDim2.new(0, 0, 1, 0)
+                -- Dynamic Position Storage
+                local openPositions = {}
+                local hiddenPositions = {}
+                
+                local function storePos(frame)
+                    if frame then
+                        -- If it was placed off-screen in Studio, assume the Open position should be 0 (on-screen)
+                        local openXScale = frame.Position.X.Scale < 0 and 0 or frame.Position.X.Scale
+                        
+                        openPositions[frame] = UDim2.new(openXScale, frame.Position.X.Offset, frame.Position.Y.Scale, frame.Position.Y.Offset)
+                        hiddenPositions[frame] = UDim2.new(-1, frame.Position.X.Offset, frame.Position.Y.Scale, frame.Position.Y.Offset)
+                        frame.Position = hiddenPositions[frame]
+                    end
+                end
+                
+                storePos(invFrame)
+                storePos(questFrame)
+                storePos(statsFrame)
+                storePos(indexFrame)
+                
                 local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
                 
                 HUDController.ToggleFrame = function(name, frame)
+                    print("[HUD DEBUG] ToggleFrame called:", name, "Frame nil?", frame == nil)
+                    if not frame then return end
+                    
                     -- Cleanup Index Details if closing Index
                     if HUDController.ActiveFrame == "Index" then
                          HUDController.DetailsOpen = false
@@ -298,24 +341,26 @@ function HUDController.Start()
                     end
                     
                     if HUDController.ActiveFrame == name then
+                        print("[HUD DEBUG] Closing current frame:", name)
                         -- Close current
-                        TweenService:Create(frame, tweenInfo, {Position = hiddenPos}):Play()
+                        TweenService:Create(frame, tweenInfo, {Position = hiddenPositions[frame]}):Play()
                         HUDController.ActiveFrame = nil
                         GuiService.SelectedObject = nil
                     else
+                        print("[HUD DEBUG] Opening frame:", name)
                         -- Close previous if exists (Use direct references)
                         if HUDController.ActiveFrame == "Inventory" and invFrame then
-                             TweenService:Create(invFrame, tweenInfo, {Position = hiddenPos}):Play()
+                             TweenService:Create(invFrame, tweenInfo, {Position = hiddenPositions[invFrame]}):Play()
                         elseif HUDController.ActiveFrame == "Statistics" and statsFrame then
-                             TweenService:Create(statsFrame, tweenInfo, {Position = hiddenPos}):Play()
+                             TweenService:Create(statsFrame, tweenInfo, {Position = hiddenPositions[statsFrame]}):Play()
                         elseif HUDController.ActiveFrame == "Quest" and questFrame then
-                             TweenService:Create(questFrame, tweenInfo, {Position = hiddenPos}):Play()
+                             TweenService:Create(questFrame, tweenInfo, {Position = hiddenPositions[questFrame]}):Play()
                         elseif HUDController.ActiveFrame == "Index" and indexFrame then
-                             TweenService:Create(indexFrame, tweenInfo, {Position = hiddenPos}):Play()
+                             TweenService:Create(indexFrame, tweenInfo, {Position = hiddenPositions[indexFrame]}):Play()
                         end
                         
                         -- Open new
-                        TweenService:Create(frame, tweenInfo, {Position = openPos}):Play()
+                        TweenService:Create(frame, tweenInfo, {Position = openPositions[frame]}):Play()
                         HUDController.ActiveFrame = name
 
                         -- Support Gamepad Navigation: Select first button
@@ -329,32 +374,31 @@ function HUDController.Start()
                 end
 
                 if invBtn then
-                    invFrame.Position = hiddenPos
-                    -- Disconnect previous if any? Usually reset destroys old buttons so clean connections.
+                    print("[HUD DEBUG] Connected Inventory button.")
                     invBtn.MouseButton1Click:Connect(function()
+                        print("[HUD DEBUG] Clicked Inventory")
                         HUDController.ToggleFrame("Inventory", invFrame)
                     end)
                 end
                 
                 if questBtn and questFrame then
-                     questFrame.Position = hiddenPos
+                      print("[HUD DEBUG] Connected Quest button.")
                       questBtn.MouseButton1Click:Connect(function()
+                          print("[HUD DEBUG] Clicked Quest")
                           HUDController.ToggleFrame("Quest", questFrame)
-                         -- Optional: Notify QuestController to update? 
-                         -- It updates on data change anyway.
                      end)
                 end
                 
                 if statsBtn and statsFrame then
-                     statsFrame.Position = hiddenPos
+                      print("[HUD DEBUG] Connected Statistics button.")
                       statsBtn.MouseButton1Click:Connect(function()
+                          print("[HUD DEBUG] Clicked Statistics")
                           HUDController.ToggleFrame("Statistics", statsFrame)
                      end)
                 end
                 
                 -- Index Logic
-                    if indexBtn and indexFrame then
-                    indexFrame.Position = hiddenPos
+                if indexBtn and indexFrame then
                     
                     local isPopulated = false
 					local FishModels = ReplicatedStorage:WaitForChild("Fishes")
@@ -446,6 +490,35 @@ function HUDController.Start()
 								local RunService = game:GetService("RunService")
 								local seed = math.random(1, 10000)
 								
+								-- Glitch Config for Illusionary Fish
+								local isGlitchy = (key == "Illusionary Fish")
+								local glitchTexts = {}
+								local glitchConfig = {
+									TextCount = 20,
+									ChangeInterval = 0.05,
+									Color1 = Color3.fromRGB(0, 150, 255), -- Blue
+									Color2 = Color3.fromRGB(255, 255, 255), -- White
+									Words = {"DREAM", "WAKE UP", "PUPPET", "OBEY", "ILLUSION", "SYSTEM ERROR", "NULL", "10101", "???", "DON'T BELONG"}
+								}
+								
+								if isGlitchy then
+									for i = 1, glitchConfig.TextCount do
+										local tl = Instance.new("TextLabel")
+										tl.BackgroundTransparency = 1
+										tl.Font = Enum.Font.Code
+										tl.TextSize = math.random(14, 28)
+										tl.Size = UDim2.new(0, 100, 0, 50)
+										tl.Position = UDim2.new(math.random(), 0, math.random(), 0)
+										tl.Text = glitchConfig.Words[math.random(1, #glitchConfig.Words)]
+										tl.TextColor3 = math.random() > 0.5 and glitchConfig.Color1 or glitchConfig.Color2
+										tl.ZIndex = 10
+										tl.Parent = vp
+										table.insert(glitchTexts, tl)
+									end
+								end
+								
+								local lastGlitch = 0
+								
 								HUDController.ViewLoop = RunService.RenderStepped:Connect(function()
 									if not m or not m.Parent then 
 										if HUDController.ViewLoop then HUDController.ViewLoop:Disconnect() end
@@ -453,6 +526,21 @@ function HUDController.Start()
 									end
 									
 									local t = os.clock()
+									
+									if isGlitchy and (t - lastGlitch > glitchConfig.ChangeInterval) then
+										lastGlitch = t
+										for _, tl in ipairs(glitchTexts) do
+											tl.Position = UDim2.new(math.random() * 0.9, 0, math.random() * 0.9, 0)
+											tl.Text = glitchConfig.Words[math.random(1, #glitchConfig.Words)]
+											tl.TextColor3 = math.random() > 0.5 and glitchConfig.Color1 or glitchConfig.Color2
+											tl.TextSize = math.random(14, 32)
+											tl.Visible = math.random() > 0.3
+											-- Occasionally make the fish model itself glitch slightly
+											if math.random() > 0.8 then
+												m:PivotTo(m:GetPivot() * CFrame.new(math.random(-1,1)*0.1, math.random(-1,1)*0.1, 0))
+											end
+										end
+									end
 									
 									-- Gentle floating (Noise based, like FishController but scaled for UI)
 									-- FishController uses floatRange = 3. We use much less for UI (e.g. 0.5)
@@ -731,6 +819,7 @@ function HUDController.Start()
                             {Key = "MegaCritChance", Name = "Mega Crit Chance", Format = "Percent", Description = "Chance for a Critical Hit to be a Mega Crit"},
                             {Key = "MegaCritPower", Name = "Mega Crit Power", Format = "Percent", Description = "Multiplier for Mega Critical Hits (Base 10x)"},
                              {Key = "InstantConversion", Name = "Instant Conversion", Format = "Percent", Description = "Converts algae to biomass instantly on harvest"},
+                            {Key = "AquariumMultiplier", Name = "Aquarium Convert Boost", Format = "Percent", Description = "Exponential bonus to conversion from Aquarium Upgrades"},
                             {Key = "ConvertMultiplier", Name = "Convert Multiplier", Format = "Percent", Description = "Multiplies biomass gained from conversion"},
                             {Key = "FishMoveSpeedMultiplier", Name = "Fish Movespeed Multiplier", Format = "Percent", Description = "Multiplies fish movement speed"},
                             {Key = "ToolAlgae", Name = "Tool Algae", Format = "Percent", Description = "Multiplies algae from all sources including abilities"},

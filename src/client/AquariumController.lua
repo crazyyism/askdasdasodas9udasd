@@ -109,9 +109,25 @@ DataUpdateEvent.OnClientEvent:Connect(function(data)
 	AquariumController.UpdateSlotColors(playerData)
 end)
 
+local function Abbreviate(n)
+	if n < 1000 then return tostring(math.floor(n + 0.5)) end
+	local suffixes = {"K", "M", "B", "T", "Qd", "Qn", "Sx", "Sp", "Oc", "No", "Dc"}
+	local i = math.floor(math.log10(n) / 3)
+	local val = n / (10 ^ (i * 3))
+	local suffix = suffixes[i] or ""
+	return string.format("%.1f%s", val, suffix):gsub("%.0", "")
+end
+
+local function FormatNumber(n, forceAbbreviate)
+    if forceAbbreviate then return Abbreviate(n) end
+	return tostring(math.floor(n + 0.5)):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
 function AquariumController.Start()
 	local interactionFrame, keybindLabel, actionLabel
+	local upgradeFrame, upgradeKeybindLabel, upgradeActionLabel
 	local handleAquariumInteraction
+	local handleUpgradeInteraction
 	
 	local function SetupUI()
 		local playerGui = player:WaitForChild("PlayerGui", 10)
@@ -124,6 +140,45 @@ function AquariumController.Start()
 			keybindLabel = interactionFrame:WaitForChild("Keybind", 5)
 			actionLabel = interactionFrame:WaitForChild("InteractionType", 5)
 			interactionFrame.Visible = false
+			
+			-- Create Upgrade Frame
+			if not mainGui:FindFirstChild("UpgradeInteraction") then
+				upgradeFrame = interactionFrame:Clone()
+				upgradeFrame.Name = "UpgradeInteraction"
+				upgradeFrame.Parent = mainGui
+				
+				-- Add a UIScale to make it smaller
+				local scale = Instance.new("UIScale")
+				scale.Scale = 0.85
+				scale.Parent = upgradeFrame
+				
+				-- Adjust Y position to sit above the existing frame
+				-- Default position logic usually sets UDim2 based on WorldToScreenPoint
+				-- We will offset the Y manually in the RenderStepped loop
+			else
+				upgradeFrame = mainGui:FindFirstChild("UpgradeInteraction")
+			end
+			
+			if upgradeFrame then
+				upgradeKeybindLabel = upgradeFrame:WaitForChild("Keybind", 5)
+				upgradeActionLabel = upgradeFrame:WaitForChild("InteractionType", 5)
+				upgradeFrame.Visible = false
+				
+				local upgradeButton = upgradeFrame:FindFirstChild("InteractionAction") or upgradeFrame:FindFirstChild("InteractionButton")
+				if upgradeButton and (upgradeButton:IsA("TextButton") or upgradeButton:IsA("ImageButton")) then
+					local function onUpgradeActivated()
+						if handleUpgradeInteraction then handleUpgradeInteraction() end
+						
+						local originalColor = upgradeButton.BackgroundColor3
+						upgradeButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+						task.delay(0.1, function()
+							upgradeButton.BackgroundColor3 = originalColor
+						end)
+					end
+					
+					upgradeButton.Activated:Connect(onUpgradeActivated)
+				end
+			end
 			
 			-- Rebind Interaction Actions (Click/Tap)
 			local interactionButton = interactionFrame:FindFirstChild("InteractionAction") or interactionFrame:FindFirstChild("InteractionButton")
@@ -199,7 +254,7 @@ function AquariumController.Start()
 			local expected = player.Name .. "'s Aquarium"
 			
 			-- Check if this is the player's aquarium
-			if lbl and lbl.Text == expected then
+				if lbl and lbl.Text == expected then
 				canClaim = true
 				claimTarget = nearest
 				interactionFrame.Visible = true
@@ -222,8 +277,29 @@ function AquariumController.Start()
 						local currentPos = interactionFrame.Position
 						local targetPos = UDim2.new(0, vector.X, 0, vector.Y)
 						interactionFrame.Position = currentPos:Lerp(targetPos, 0.2)
+						
+						-- Upgrade Frame Logic
+						if upgradeFrame then
+							upgradeFrame.Visible = true
+							upgradeKeybindLabel.Text = "F"
+							local currentLevel = (playerData and playerData.AquariumLevel) or 0
+							local cost = 2500 * math.pow(2, currentLevel)
+							local useAbbr = playerData and playerData.Settings and playerData.Settings.AbbreviateAlgae
+							
+							local currentMult = math.pow(1.5, currentLevel)
+							local nextMult = math.pow(1.5, currentLevel + 1)
+							local currentStr = string.format("%.2f", currentMult):gsub("%.?0+$", "") .. "x"
+							local nextStr = string.format("%.2f", nextMult):gsub("%.?0+$", "") .. "x"
+							
+							upgradeActionLabel.Text = "Upgrade Convert Rate (" .. currentStr .. " -> " .. nextStr .. ") [Cost: " .. FormatNumber(cost, useAbbr) .. "]"
+							
+							local upgCurrentPos = upgradeFrame.Position
+							local upgTargetPos = UDim2.new(0, vector.X, 0, vector.Y - 75) -- 75 pixels above (higher to avoid clipping)
+							upgradeFrame.Position = upgCurrentPos:Lerp(upgTargetPos, 0.2)
+						end
 					else
 						interactionFrame.Visible = false
+						if upgradeFrame then upgradeFrame.Visible = false end
 					end
 				end
 
@@ -231,6 +307,7 @@ function AquariumController.Start()
 				canClaim = true
 				claimTarget = nearest
 				interactionFrame.Visible = true
+				if upgradeFrame then upgradeFrame.Visible = false end
 				keybindLabel.Text = "E"
 				actionLabel.Text = "Claim Aquarium"
 				
@@ -253,7 +330,8 @@ function AquariumController.Start()
 				-- Owned by someone else OR invalid state -> Hide and Ignore
 				canClaim = false
 				claimTarget = nil
-				if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") then
+				if upgradeFrame then upgradeFrame.Visible = false end
+				if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Machine") then
 					interactionFrame.Visible = false
 				end
 			end
@@ -261,10 +339,11 @@ function AquariumController.Start()
 			-- IMPORTANT: Reset state when no nearest found
 			canClaim = false
 			claimTarget = nil
+			if upgradeFrame then upgradeFrame.Visible = false end
 			
 			-- Only hide if WE owns it (check text) or if it's generic
 			-- Prevents hiding Shop interaction
-			if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") then
+			if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Machine") then
 				interactionFrame.Visible = false
 			end
 		end
@@ -328,6 +407,34 @@ function AquariumController.Start()
 		end
 	end
 	
+	handleUpgradeInteraction = function()
+		if interactionDebounce then return end
+		if canClaim and claimTarget then
+			local ownerPart = claimTarget:FindFirstChild("Ownership")
+			local gui = ownerPart and ownerPart:FindFirstChild("SurfaceGui")
+			local lbl = gui and gui:FindFirstChild("TextLabel")
+			local expected = player.Name .. "'s Aquarium"
+			
+			if lbl and lbl.Text == expected then
+				interactionDebounce = true
+				
+				local UpgradeAquarium = Remotes:FindFirstChild("UpgradeAquarium")
+				if UpgradeAquarium then
+					local success, msg = UpgradeAquarium:InvokeServer(claimTarget)
+					if success then
+						print("Upgraded to level: " .. tostring(msg))
+					else
+						warn("Failed to upgrade: " .. tostring(msg))
+					end
+				end
+				
+				task.delay(0.3, function()
+					interactionDebounce = false
+				end)
+			end
+		end
+	end
+	
 	-- Slot Click Persistence: Detect clicks even if GPE is true for non-interactive elements?
 	-- For now, let's keep GPE but increase accuracy.
 	UserInputService.InputBegan:Connect(function(input, gpe)
@@ -337,6 +444,11 @@ function AquariumController.Start()
 		if input.KeyCode == Enum.KeyCode.E then
 			if gpe then return end
 			handleAquariumInteraction()
+		elseif input.KeyCode == Enum.KeyCode.F then
+			if gpe then return end
+			if upgradeFrame and upgradeFrame.Visible then
+				handleUpgradeInteraction()
+			end
 		elseif isClick or isTouch then
 			-- If gpe is true, it might be a button click. We usually want buttons to block slot clicks.
 			if gpe then return end 

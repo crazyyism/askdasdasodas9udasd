@@ -20,6 +20,12 @@ local hiddenGuis = {}
 local guiAddedConnection = nil
 local loadingSound = nil
 
+-- Wave background variables
+local TilesContainer = nil
+local waveConnection = nil
+local tilesList = {}
+local transitionStartTime = nil
+
 -- UI References
 local ScreenGui
 local MainFrame
@@ -30,7 +36,11 @@ local SkipPrompt
 local FadeOverlay
 local FunnyImage
 
--- Preloaded Phase 2 Data
+local Phase2Frame
+local PlayButton
+local Phase2Title
+local buttonOriginalPositions = {}
+
 local lsCameraPart = nil
 local avatarModel = nil
 
@@ -74,9 +84,13 @@ end
 
 -- Helper: Initialize Loading Screen UI from existing StarterGui element
 local function createUI()
+	local template = StarterGui:WaitForChild("LoadingScreenGui", 5)
+	if template then
+		template.ResetOnSpawn = false
+	end
+
 	ScreenGui = player:WaitForChild("PlayerGui"):FindFirstChild("LoadingScreenGui")
 	if not ScreenGui then
-		local template = StarterGui:WaitForChild("LoadingScreenGui", 5)
 		if template then
 			ScreenGui = template:Clone()
 			ScreenGui.Parent = player.PlayerGui
@@ -85,6 +99,7 @@ local function createUI()
 			return false
 		end
 	end
+	ScreenGui.ResetOnSpawn = false
 
 	MainFrame = ScreenGui:WaitForChild("MainFrame")
 	FadeOverlay = ScreenGui:WaitForChild("FadeOverlay")
@@ -95,6 +110,30 @@ local function createUI()
 	PercentageLabel = MainFrame:WaitForChild("PercentageLabel")
 	SkipPrompt = MainFrame:WaitForChild("SkipPrompt")
 	FunnyImage = ScreenGui:FindFirstChild("FunnyImage")
+	
+	Phase2Frame = ScreenGui:FindFirstChild("Phase2")
+	if Phase2Frame then
+		PlayButton = Phase2Frame:FindFirstChild("Play")
+		Phase2Title = Phase2Frame:FindFirstChild("Title")
+		
+		-- Destroy Settings and Credits buttons if they exist
+		local settingsBtn = Phase2Frame:FindFirstChild("Settings")
+		if settingsBtn then settingsBtn:Destroy() end
+		local creditsBtn = Phase2Frame:FindFirstChild("Credits")
+		if creditsBtn then creditsBtn:Destroy() end
+		
+		if PlayButton then
+			buttonOriginalPositions[PlayButton] = PlayButton.Position
+			
+			if Phase2Title then
+				buttonOriginalPositions[Phase2Title] = Phase2Title.Position
+				Phase2Title.Visible = true
+			end
+			
+			Phase2Frame.Visible = false
+			PlayButton.Visible = true
+		end
+	end
 	
 	-- Ensure starting state
 	ScreenGui.Enabled = true
@@ -146,6 +185,183 @@ local function startFunnyImageRotation()
 			FunnyImage.Rotation = FunnyImage.Rotation + (90 * dt)
 		else
 			if connection then connection:Disconnect() end
+		end
+	end)
+end
+
+-- Helper: Create 16x9 Wave Grid of Tiles
+local function createWaveGrid()
+	if not MainFrame then return end
+	
+	-- Bring other MainFrame children to front (ZIndex >= 2)
+	for _, child in ipairs(MainFrame:GetChildren()) do
+		if child:IsA("GuiObject") then
+			child.ZIndex = math.max(child.ZIndex, 2)
+			for _, descendant in ipairs(child:GetDescendants()) do
+				if descendant:IsA("GuiObject") then
+					descendant.ZIndex = math.max(descendant.ZIndex, 2)
+				end
+			end
+		end
+	end
+	
+	-- Set MainFrame background to a very dark grey to make tile gaps pop
+	MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+	
+	-- Create Frame to hold tiles container
+	TilesContainer = Instance.new("Frame")
+	TilesContainer.Name = "TilesContainer"
+	TilesContainer.Size = UDim2.new(1, 0, 1, 0)
+	TilesContainer.Position = UDim2.new(0, 0, 0, 0)
+	TilesContainer.BackgroundTransparency = 1
+	TilesContainer.ZIndex = 1
+	TilesContainer.Parent = MainFrame
+	
+	local cols = 16
+	local rows = 9
+	table.clear(tilesList)
+	
+	local cellWidth = 1 / cols
+	local cellHeight = 1 / rows
+	
+	for r = 1, rows do
+		for c = 1, cols do
+			local tile = Instance.new("Frame")
+			tile.Name = string.format("Tile_%d_%d", c, r)
+			tile.AnchorPoint = Vector2.new(0.5, 0.5)
+			tile.Position = UDim2.new((c - 0.5) * cellWidth, 0, (r - 0.5) * cellHeight, 0)
+			tile.BackgroundColor3 = Color3.fromRGB(5, 5, 5) -- darker grey
+			tile.BorderSizePixel = 0
+			tile.ZIndex = 1
+			tile.Parent = TilesContainer
+			
+			table.insert(tilesList, {
+				instance = tile,
+				c = c,
+				r = r,
+				-- Precompute Euclidean distance to the top-right corner tile (cols, 1)
+				dist = math.sqrt((c - cols)^2 + (r - 1)^2)
+			})
+		end
+	end
+end
+
+-- Helper: Animate Wave grid tiles
+local function startWaveAnimation()
+	if waveConnection then
+		waveConnection:Disconnect()
+		waveConnection = nil
+	end
+	
+	local RunService = game:GetService("RunService")
+	local startTime = os.clock()
+	
+	local cols = 16
+	local rows = 9
+	local cellWidth = 1 / cols
+	local cellHeight = 1 / rows
+	
+	-- Tweakable Wave Constants (User modified values preserved)
+	local waveSpeed = 14        -- Speed at which the ripple sweeps across the grid
+	local pulseDuration = 0.4    -- How long the swell lasts on any individual tile
+	local period = 2            -- Total time between the start of successive ripples
+	local wavePower = 2.5         -- Sharpness of the wave peak
+	local baseScale = 0.75        -- Scale of tiles in resting state
+	local peakScale = 1.65        -- Scale of tiles at peak of wave
+	local scaleRange = peakScale - baseScale
+	
+	local baseColor = Color3.fromRGB(0,0,0) -- Darker grey color
+	local peakColor = Color3.fromRGB(100, 100, 100) -- Dimmer white
+	
+	waveConnection = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - startTime
+		
+		-- Calculate the fade progress if we are transitioning to phase 2
+		local fadeProgress = 0
+		if isLoadedFinished and transitionStartTime then
+			local fadeElapsed = os.clock() - transitionStartTime
+			fadeProgress = math.clamp(fadeElapsed / 0.4, 0, 1)
+		end
+		
+		-- Calculate the time elapsed since the current ripple cycle started
+		local timeSincePulseStart = t % period
+		
+		for _, item in ipairs(tilesList) do
+			local tile = item.instance
+			if tile and tile.Parent then
+				-- Calculate time offset based on distance to source
+				local timeDiff = timeSincePulseStart - (item.dist / waveSpeed)
+				
+				local intensity = 0
+				if timeDiff >= 0 and timeDiff < pulseDuration then
+					-- Map to [0, math.pi] for sine-based swell up and down
+					local angle = (timeDiff / pulseDuration) * math.pi
+					intensity = math.sin(angle) ^ wavePower
+				end
+				
+				-- Lerp size, color, and transparency
+				local currentScale = baseScale + (intensity * scaleRange)
+				tile.Size = UDim2.new(cellWidth * currentScale, 0, cellHeight * currentScale, 0)
+				tile.BackgroundColor3 = baseColor:Lerp(peakColor, intensity)
+				tile.BackgroundTransparency = fadeProgress
+			end
+		end
+	end)
+end
+
+-- Helper: UI Parallax for Phase 2 Buttons
+local function startFloatingButtons()
+	local RunService = game:GetService("RunService")
+	local mouse = player:GetMouse()
+	
+	-- We apply a smooth lerp factor to make it feel weighty
+	local currentOffsetX = 0
+	local currentOffsetY = 0
+	
+	-- Max pixel displacement
+	local maxOffset = 30 
+	
+	local connection
+	connection = RunService.RenderStepped:Connect(function(dt)
+		if not inPhase2 or not Phase2Frame then
+			if connection then connection:Disconnect() end
+			return
+		end
+		
+		local screenSize = workspace.CurrentCamera.ViewportSize
+		local ndcX = 0
+		local ndcY = 0
+		
+		if screenSize.X > 0 and screenSize.Y > 0 then
+			ndcX = (mouse.X / screenSize.X) * 2 - 1
+			ndcY = (mouse.Y / screenSize.Y) * 2 - 1
+		end
+		
+		ndcX = math.clamp(ndcX, -1, 1)
+		ndcY = math.clamp(ndcY, -1, 1)
+		
+		-- Move opposite to the mouse to match the 3D camera pan illusion
+		local targetOffsetX = -ndcX * maxOffset
+		local targetOffsetY = -ndcY * maxOffset
+		
+		-- Smooth Lerp
+		currentOffsetX = currentOffsetX + (targetOffsetX - currentOffsetX) * 0.1
+		currentOffsetY = currentOffsetY + (targetOffsetY - currentOffsetY) * 0.1
+		
+		-- Title (Furthest back - moves the least)
+		if Phase2Title and buttonOriginalPositions[Phase2Title] then
+			local orig = buttonOriginalPositions[Phase2Title]
+			local depthMult = 0.3
+			Phase2Title.Position = UDim2.new(orig.X.Scale, orig.X.Offset + (currentOffsetX * depthMult), orig.Y.Scale, orig.Y.Offset + (currentOffsetY * depthMult))
+			Phase2Title.Rotation = 0
+		end
+		
+		-- Play (Foreground - moves the most)
+		if PlayButton and buttonOriginalPositions[PlayButton] then
+			local orig = buttonOriginalPositions[PlayButton]
+			local depthMult = 1.0
+			PlayButton.Position = UDim2.new(orig.X.Scale, orig.X.Offset + (currentOffsetX * depthMult), orig.Y.Scale, orig.Y.Offset + (currentOffsetY * depthMult))
+			PlayButton.Rotation = 0
 		end
 	end)
 end
@@ -211,6 +427,7 @@ local function startSpawnTransition(avatarModel)
 	
 	-- 1. Fade to black over 1 second
 	local fadeInfo = TweenInfo.new(1.0, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	FadeOverlay.ZIndex = 100 -- Ensure overlay covers the Phase 2 buttons
 	TweenService:Create(FadeOverlay, fadeInfo, {BackgroundTransparency = 0}):Play()
 	
 	if loadingSound then
@@ -386,9 +603,10 @@ end
 -- Transition to Phase 2: Fade out loading UI, start parallax
 local function transitionToPhase2()
 	isLoadedFinished = true
+	transitionStartTime = os.clock()
 
 	-- Fade out the loading screen overlay elements over 2.5 seconds
-	local fadeInfo = TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local fadeInfo = TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	TweenService:Create(TitleLabel, fadeInfo, {TextTransparency = 1}):Play()
 	TweenService:Create(PercentageLabel, fadeInfo, {TextTransparency = 1}):Play()
 	TweenService:Create(SkipPrompt, fadeInfo, {TextTransparency = 1}):Play()
@@ -396,6 +614,29 @@ local function transitionToPhase2()
 		TweenService:Create(FunnyImage, fadeInfo, {ImageTransparency = 1}):Play()
 	end
 	TweenService:Create(ProgressBarFill, fadeInfo, {BackgroundTransparency = 1}):Play()
+	
+
+	if Phase2Frame then
+		Phase2Frame.GroupTransparency = 0
+		Phase2Frame.Visible = true
+		
+		-- Tween Phase 2 Title and PlayButton left to original positions instead of fading in (staggered, Quad style)
+		local enterTweenInfo = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		if Phase2Title and buttonOriginalPositions[Phase2Title] then
+			local orig = buttonOriginalPositions[Phase2Title]
+			Phase2Title.Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
+			TweenService:Create(Phase2Title, enterTweenInfo, {Position = orig}):Play()
+		end
+		if PlayButton and buttonOriginalPositions[PlayButton] then
+			local orig = buttonOriginalPositions[PlayButton]
+			PlayButton.Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
+			task.delay(0.5, function()
+				if PlayButton and PlayButton.Parent then
+					TweenService:Create(PlayButton, enterTweenInfo, {Position = orig}):Play()
+				end
+			end)
+		end
+	end
 	
 	-- Fade out main background to reveal 3D scene (parallax starts)
 	TweenService:Create(MainFrame, fadeInfo, {BackgroundTransparency = 1}):Play()
@@ -408,15 +649,79 @@ local function transitionToPhase2()
 	if FunnyImage then
 		FunnyImage:Destroy()
 	end
+	if waveConnection then
+		waveConnection:Disconnect()
+		waveConnection = nil
+	end
+	if TilesContainer then
+		TilesContainer:Destroy()
+		TilesContainer = nil
+	end
+	table.clear(tilesList)
+	
 
-	-- Listen for clicks anywhere on screen to enter the game
-	local phase2InputConnection
-	phase2InputConnection = UserInputService.InputBegan:Connect(function(input, gpe)
-		if not inPhase2 then return end
-		if gpe then return end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			phase2InputConnection:Disconnect()
-			startSpawnTransition(avatarModel)
+
+	inPhase2 = true
+
+	-- Initialize Phase 2 elements
+	task.spawn(function()
+		if Phase2Frame and PlayButton then
+			-- Start UI Parallax after the enter tweens complete to prevent conflicts
+			task.delay(1.1, function()
+				if inPhase2 then
+					startFloatingButtons()
+				end
+			end)
+			
+			-- Hook up the Play button
+			local playConnection
+			playConnection = PlayButton.MouseButton1Click:Connect(function()
+				if not inPhase2 then return end
+				playConnection:Disconnect()
+				
+				-- Stop parallax immediately
+				inPhase2 = false
+				
+				-- Tween PlayButton and Phase2Title right off-screen
+				local exitTweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+				local playTween, titleTween
+				
+				if PlayButton and buttonOriginalPositions[PlayButton] then
+					local orig = buttonOriginalPositions[PlayButton]
+					playTween = TweenService:Create(PlayButton, exitTweenInfo, {
+						Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
+					})
+					playTween:Play()
+				end
+				
+				if Phase2Title and buttonOriginalPositions[Phase2Title] then
+					local orig = buttonOriginalPositions[Phase2Title]
+					titleTween = TweenService:Create(Phase2Title, exitTweenInfo, {
+						Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
+					})
+					titleTween:Play()
+				end
+				
+				-- Wait for the exit tween to complete before starting transition
+				if playTween then
+					playTween.Completed:Wait()
+				else
+					task.wait(0.6)
+				end
+				
+				startSpawnTransition(avatarModel)
+			end)
+		else
+			-- Fallback to clicking anywhere
+			local phase2InputConnection
+			phase2InputConnection = UserInputService.InputBegan:Connect(function(input, gpe)
+				if not inPhase2 then return end
+				if gpe then return end
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					phase2InputConnection:Disconnect()
+					startSpawnTransition(avatarModel)
+				end
+			end)
 		end
 	end)
 end
@@ -425,6 +730,10 @@ function LoadingController.Start()
 	-- 1. Create interface
 	local success = createUI()
 	if not success then return end
+	
+	-- Initialize and start wave grid background
+	createWaveGrid()
+	startWaveAnimation()
 	
 	-- Start background animations
 	startLoadingTextAnimation()
@@ -437,9 +746,10 @@ function LoadingController.Start()
 	loadingSound = Instance.new("Sound")
 	loadingSound.SoundId = "rbxassetid://139307780959520"
 	loadingSound.Looped = true
-	loadingSound.Volume = 0.5
+	loadingSound.Volume = 1.5
 	loadingSound.Parent = workspace
 	loadingSound:Play()
+
 
 	-- Hide all other UI and CoreGui
 	pcall(function()
@@ -466,7 +776,6 @@ function LoadingController.Start()
 
 	-- 2. Gather EVERYTHING to preload (Animations, Sounds, Textures, Meshes, UI, VFX)
 	local servicesToSearch = {
-		workspace,
 		ReplicatedStorage,
 		ReplicatedFirst,
 		game:GetService("Lighting"),
@@ -474,6 +783,16 @@ function LoadingController.Start()
 		game:GetService("StarterPlayer"),
 		game:GetService("SoundService")
 	}
+	
+	local loadingStuff = workspace:FindFirstChild("LoadingScreenStuff")
+	if loadingStuff then
+		table.insert(servicesToSearch, loadingStuff)
+	end
+	
+	local npcsFolder = workspace:FindFirstChild("NPCs")
+	if npcsFolder then
+		table.insert(servicesToSearch, npcsFolder)
+	end
 
 	local preloadableClasses = {
 		"Animation", "Decal", "Texture", "Sound", "MeshPart", "SpecialMesh", 
@@ -493,7 +812,7 @@ function LoadingController.Start()
 		end
 	end
 
-	-- 3. Concurrent Timer: Allow skip after 10 seconds
+	-- 3. Concurrent Timer: Allow skip after 15 seconds
 	local allowSkip = false
 	local skipInputConnection = nil
 	task.spawn(function()
@@ -521,39 +840,23 @@ function LoadingController.Start()
 	local totalAssets = #assetsToLoad
 	if totalAssets > 0 then
 		local loadedCount = 0
-		local batchSize = 5 -- small batches for smooth GUI updates
 		
-		for i = 1, totalAssets, batchSize do
-			if isSkipped then break end
-			
-			local batch = {}
-			for j = i, math.min(i + batchSize - 1, totalAssets) do
-				table.insert(batch, assetsToLoad[j])
-			end
-			
-			pcall(function()
-				ContentProvider:PreloadAsync(batch)
+		pcall(function()
+			ContentProvider:PreloadAsync(assetsToLoad, function(contentId, assetFetchStatus)
+				if isSkipped then return end
+				loadedCount = loadedCount + 1
+				local progress = loadedCount / totalAssets
+				
+				-- Smoothly set size and percentage text
+				ProgressBarFill.Size = UDim2.new(progress, 0, 0.019, 0)
+				PercentageLabel.Text = math.floor(progress * 100) .. "%"
 			end)
-			
-			loadedCount = math.min(i + batchSize - 1, totalAssets)
-			local progress = loadedCount / totalAssets
-			
-			-- Animate loading bar and progress indicators
-			TweenService:Create(ProgressBarFill, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Size = UDim2.new(progress, 0, 0.019, 0)
-			}):Play()
-			
-			PercentageLabel.Text = math.floor(progress * 100) .. "%"
-			
-			task.wait(0.02) -- yield to keep the UI fluid
-		end
+		end)
 	end
 
 	-- Finalize loading bar if not skipped
 	if not isSkipped then
-		TweenService:Create(ProgressBarFill, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Size = UDim2.new(1, 0, 0.019, 0)
-		}):Play()
+		ProgressBarFill.Size = UDim2.new(1, 0, 0.019, 0)
 		PercentageLabel.Text = "100%"
 		task.wait(0.4)
 		

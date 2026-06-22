@@ -24,6 +24,9 @@ pcall(function()
 end)
 PhysicsService:CollisionGroupSetCollidable("Players", "Players", false)
 
+-- Disable auto loading characters so they only spawn when the loading screen finishes
+game:GetService("Players").CharacterAutoLoads = false
+
 local function SetCollisionGroup(character)
 	for _, child in ipairs(character:GetDescendants()) do
 		if child:IsA("BasePart") then
@@ -44,9 +47,25 @@ SeaMineService.Start()
 MobService.Start()
 -- ShopService doesn't have a .Start() yet but it connects OnServerEvent on requirement
 
+
 -- Setup Conversion RemoteEvent
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+
+local function getFieldFolder(fieldName)
+	if not fieldName then return nil end
+	local folder = workspace:FindFirstChild(fieldName)
+	if folder then return folder end
+	
+	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	for _, child in ipairs(workspace:GetChildren()) do
+		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+		if childClean == cleanName then
+			return child
+		end
+	end
+	return nil
+end
 
 
 local VFXReplication = Remotes:FindFirstChild("VFXReplication")
@@ -104,6 +123,17 @@ if not NotificationEvent then
 	NotificationEvent.Parent = Remotes
 end
 
+local SpawnPlayerRequest = Remotes:FindFirstChild("SpawnPlayerRequest")
+if not SpawnPlayerRequest then
+	SpawnPlayerRequest = Instance.new("RemoteEvent")
+	SpawnPlayerRequest.Name = "SpawnPlayerRequest"
+	SpawnPlayerRequest.Parent = Remotes
+end
+
+SpawnPlayerRequest.OnServerEvent:Connect(function(player)
+	player:LoadCharacter()
+end)
+
 AbilityActivation.OnServerEvent:Connect(function(player, abilityName)
 	if abilityName == "RainmakerUltimate" then
 		AbilityService.IncrementAbilitiesCommitted(player)
@@ -138,7 +168,7 @@ AbilityActivation.OnServerEvent:Connect(function(player, abilityName)
 			-- Pre-build filter
 			local filterList = {}
 			for fieldName, _ in pairs(ResourceConfig.Fields) do
-				local f = workspace:FindFirstChild(fieldName)
+				local f = getFieldFolder(fieldName)
 				if f then table.insert(filterList, f) end
 			end
 			
@@ -264,7 +294,7 @@ GuardianRequest.OnServerEvent:Connect(function(player, movetype)
 			overlapParams.FilterType = Enum.RaycastFilterType.Include
 			local filterFolders = {}
 			for fieldName, _ in pairs(ResourceConfig.Fields) do
-				local f = workspace:FindFirstChild(fieldName)
+				local f = getFieldFolder(fieldName)
 				if f then table.insert(filterFolders, f) end
 			end
 			overlapParams.FilterDescendantsInstances = filterFolders
@@ -296,6 +326,18 @@ local BadgeService = game:GetService("BadgeService")
 local WELCOME_BADGE_ID = 2305187807978897
 
 game:GetService("Players").PlayerAdded:Connect(function(player)
+	-- Tutorial Safety Check: Reset orphaned aquarium claims if player hasn't completed the tutorial
+	task.spawn(function()
+		while not PlayerData.isLoaded(player) do
+			task.wait(0.1)
+		end
+		local data = PlayerData.get(player)
+		if data and data.TutorialCompleted == false then
+			print("[Tutorial Safety] Player " .. player.Name .. " has not completed the tutorial. Releasing any owned aquariums to ensure a clean start.")
+			AquariumService.ReleaseAquarium(player)
+		end
+	end)
+
 	player.CharacterAdded:Connect(function(character)
 		SetCollisionGroup(character)
 		character.DescendantAdded:Connect(function(descendant)
@@ -319,6 +361,15 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 			
 			local propScale = humanoid:FindFirstChild("BodyProportionScale")
 			if propScale then propScale.Value = 0 end
+			
+			-- Fix: Auto-respawn logic since CharacterAutoLoads = false
+			humanoid.Died:Connect(function()
+				task.delay(game:GetService("Players").RespawnTime, function()
+					if player and player.Parent then
+						player:LoadCharacter()
+					end
+				end)
+			end)
 		end
 	end)
 
@@ -335,7 +386,156 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 
 	player.Chatted:Connect(function(msg)
 		print("Chat from " .. player.Name .. ": " .. msg)
-		if msg:lower() == "/testcapacity" and AllowedUsers[player.Name] then
+		if msg:lower() == "/resetdata" then
+			local NotificationEvent = Remotes:FindFirstChild("NotificationEvent")
+			if NotificationEvent then
+				NotificationEvent:FireClient(player, "WARNING: This will reset ALL your progress. This cannot be undone! Type '/resetdata confirm' to proceed.", Color3.fromRGB(255, 100, 100))
+			end
+		elseif msg:lower() == "/resetdata confirm" then
+			-- 1. Release aquarium
+			AquariumService.ReleaseAquarium(player)
+			-- 2. Reset Player Data
+			PlayerData.Reset(player)
+			-- 3. Kick player to complete reset
+			player:Kick("Your progress has been successfully reset! Please rejoin to start fresh.")
+		elseif msg:lower():sub(1, 10) == "/copydata " and AllowedUsers[player.Name] then
+			local arg = msg:sub(11)
+			arg = arg:match("^%s*(.-)%s*$")
+			
+			local targetUserId = tonumber(arg)
+			local targetName = arg
+			
+			task.spawn(function()
+				local DataStoreService = game:GetService("DataStoreService")
+				local DataStore = DataStoreService:GetDataStore("Fish_Hatchery")
+				
+				if not targetUserId then
+					-- Resolve username to UserId
+					local success, resolvedId = pcall(function()
+						return game:GetService("Players"):GetUserIdFromNameAsync(arg)
+					end)
+					if success and resolvedId then
+						targetUserId = resolvedId
+					else
+						local NotificationEvent = Remotes:FindFirstChild("NotificationEvent")
+						if NotificationEvent then
+							NotificationEvent:FireClient(player, "Error: Could not resolve username '" .. arg .. "'", Color3.fromRGB(255, 50, 50))
+						end
+						return
+					end
+				else
+					-- Resolve UserId to username
+					local success, resolvedName = pcall(function()
+						return game:GetService("Players"):GetNameFromUserIdAsync(targetUserId)
+					end)
+					if success and resolvedName then
+						targetName = resolvedName
+					end
+				end
+				
+				-- Read target data from DataStore
+				local success, result = pcall(function()
+					return DataStore:GetAsync("User_" .. targetUserId)
+				end)
+				
+				if success and result then
+					-- 1. Release current aquarium
+					AquariumService.ReleaseAquarium(player)
+					
+					-- 2. Update data
+					local function deepCopy(orig)
+						local copy
+						if type(orig) == "table" then
+							copy = {}
+							for orig_key, orig_value in next, orig, nil do
+								copy[deepCopy(orig_key)] = deepCopy(orig_value)
+							end
+						else
+							copy = orig
+						end
+						return copy
+					end
+					
+					local cleanTargetData = deepCopy(result)
+					cleanTargetData._SessionLock = nil
+					cleanTargetData._LastSaved = nil
+					
+					PlayerData.update(player, function(data)
+						for k, v in pairs(cleanTargetData) do
+							if k ~= "_SessionLock" and k ~= "_LastSaved" then
+								data[k] = v
+							end
+						end
+						return data
+					end)
+					
+					-- 3. Kick player to force reload
+					player:Kick("Successfully copied progress from " .. targetName .. "! Rejoin to play with this progress.")
+				else
+					local NotificationEvent = Remotes:FindFirstChild("NotificationEvent")
+					if NotificationEvent then
+						NotificationEvent:FireClient(player, "Error: Could not load data for " .. targetName .. " (DataStore empty or failed)", Color3.fromRGB(255, 50, 50))
+					end
+				end
+			end)
+		elseif msg:lower():sub(1, 16) == "/resetdataother " and AllowedUsers[player.Name] then
+			local arg = msg:sub(17)
+			arg = arg:match("^%s*(.-)%s*$")
+			
+			local targetUserId = tonumber(arg)
+			local targetName = arg
+			
+			task.spawn(function()
+				local DataStoreService = game:GetService("DataStoreService")
+				local DataStore = DataStoreService:GetDataStore("Fish_Hatchery")
+				
+				if not targetUserId then
+					-- Resolve username to UserId
+					local success, resolvedId = pcall(function()
+						return game:GetService("Players"):GetUserIdFromNameAsync(arg)
+					end)
+					if success and resolvedId then
+						targetUserId = resolvedId
+					else
+						local NotificationEvent = Remotes:FindFirstChild("NotificationEvent")
+						if NotificationEvent then
+							NotificationEvent:FireClient(player, "Error: Could not resolve username '" .. arg .. "'", Color3.fromRGB(255, 50, 50))
+						end
+						return
+					end
+				else
+					-- Resolve UserId to username
+					local success, resolvedName = pcall(function()
+						return game:GetService("Players"):GetNameFromUserIdAsync(targetUserId)
+					end)
+					if success and resolvedName then
+						targetName = resolvedName
+					end
+				end
+				
+				local targetPlayer = game:GetService("Players"):GetPlayerByUserId(targetUserId)
+				if targetPlayer then
+					targetPlayer:Kick("Your data has been wiped by an administrator.")
+					task.wait(2) -- Wait for session cleanup
+				end
+				
+				local success, result = pcall(function()
+					DataStore:RemoveAsync("User_" .. targetUserId)
+				end)
+				
+				if success then
+					local NotificationEvent = Remotes:FindFirstChild("NotificationEvent")
+					if NotificationEvent then
+						NotificationEvent:FireClient(player, "Successfully wiped data for " .. targetName .. ".", Color3.fromRGB(50, 255, 50))
+					end
+				else
+					local NotificationEvent = Remotes:FindFirstChild("NotificationEvent")
+					if NotificationEvent then
+						NotificationEvent:FireClient(player, "Error: Failed to wipe data for " .. targetName .. ".", Color3.fromRGB(255, 50, 50))
+					end
+				end
+			end)
+		elseif msg:lower() == "/testcapacity" and AllowedUsers[player.Name] then
 			PlayerData.update(player, function(data)
 				if not data.Stats then data.Stats = {} end
 				-- Set MaxCapacity directly — RecalculateStats resets CapacityMultiplier

@@ -28,7 +28,29 @@ end
 
 -- Rate limit remote usage
 function SecurityService.ValidateRemoteCall(player, remoteName)
-	-- Disabled per user request
+	local userId = player.UserId
+	if not remoteUsage[userId] then
+		remoteUsage[userId] = {}
+	end
+	
+	local usage = remoteUsage[userId][remoteName]
+	if not usage then
+		usage = { Count = 0, LastReset = os.clock() }
+		remoteUsage[userId][remoteName] = usage
+	end
+	
+	local now = os.clock()
+	if now - usage.LastReset >= REMOTE_LIMIT_WINDOW then
+		usage.Count = 0
+		usage.LastReset = now
+	end
+	
+	usage.Count = usage.Count + 1
+	if usage.Count > MAX_REMOTES_PER_WINDOW then
+		-- Too many calls
+		return false
+	end
+	
 	return true
 end
 

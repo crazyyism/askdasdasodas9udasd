@@ -23,6 +23,11 @@ local currentShopEntry = nil -- Specific entry from knownShops
 local currentOpenFrame = nil
 local currentShopItems = {} -- Array of {Key = "ItemID", Data = ItemData, CamIndex = 1}
 
+local function FormatNumber(n)
+	return tostring(math.floor(n + 0.5)):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
+
 -- Forward declaration for interaction handler
 local handleInteraction
 
@@ -145,16 +150,28 @@ local function RegisterShop(model)
 	-- Prioritize direct key match first
 	if ShopConfig.Shops[name] then
 		targetKey = name
-	elseif name == "EggShop" or name == "BasicEggShop" then 
-		targetKey = "EggShop" 
-	elseif name == "NoobShop" then 
-		targetKey = "NoobShop"
-	elseif name == "ArtifactShop1" then -- Strict match for the main shop model
-		targetKey = "ArtifactShop1"
-	elseif name == "RunicShop" then
-		targetKey = "RunicShop"
-	elseif name:lower():match("shop") or name:lower():match("egg") then
-		if name:lower():match("noob") then targetKey = "NoobShop" else targetKey = "EggShop" end
+	else
+		-- Normalize name by removing spaces (e.g., "Zooplankton Machine" -> "ZooplanktonMachine")
+		local cleanName = name:gsub("%s+", "")
+		if ShopConfig.Shops[cleanName] then
+			targetKey = cleanName
+		end
+	end
+	
+	if not targetKey then
+		if name == "EggShop" or name == "BasicEggShop" then 
+			targetKey = "EggShop" 
+		elseif name == "NoobShop" then 
+			targetKey = "NoobShop"
+		elseif name == "ArtifactShop1" then -- Strict match for the main shop model
+			targetKey = "ArtifactShop1"
+		elseif name == "RunicShop" then
+			targetKey = "RunicShop"
+		elseif name == "ZooplanktonMachine" then
+			targetKey = "ZooplanktonMachine"
+		elseif name:lower():match("shop") or name:lower():match("egg") then
+			if name:lower():match("noob") then targetKey = "NoobShop" else targetKey = "EggShop" end
+		end
 	end
 	
 	if targetKey then
@@ -732,7 +749,7 @@ function ShopController.UpdateShopDisplay(shopFrame, shopName)
 		
 		local materialName = shopEquip:FindFirstChild("MaterialName")
 		if materialName then
-			materialName.Text = item.Name
+			materialName.Text = item.DisplayName or item.Name
 		end
 		
 		local cost = shopEquip:FindFirstChild("Cost")
@@ -747,7 +764,7 @@ function ShopController.UpdateShopDisplay(shopFrame, shopName)
 		
 		if cost and cost:FindFirstChild("CostText") then
 			local suffix = (item.Currency == "Biomass" and " Biomass") or ""
-			cost.CostText.Text = tostring(displayPrice) .. suffix
+			cost.CostText.Text = FormatNumber(displayPrice) .. suffix
 		end
 
 		-- Handle Material Requirements

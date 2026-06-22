@@ -40,6 +40,7 @@ local SettingsController = require(script.SettingsController)
 local MusicController = require(script.MusicController)
 local ConsoleController = require(script.ConsoleController)
 local CannonController = require(script.CannonController)
+local TutorialController = require(script.TutorialController)
 
 local LoadingController = require(script.LoadingController)
 
@@ -69,6 +70,7 @@ SettingsController.Start()
 MusicController.Start()
 ConsoleController.Start()
 CannonController.Start()
+TutorialController.Start()
 -- ConversionVisualController has no Start() - it sets up listeners on require
 
 

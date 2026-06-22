@@ -96,7 +96,7 @@ FishConfig.Abilities = {
 		Description = "Summons a sun that refills algae around it and grants an Orange Algae Boost for every tick you are within its radius."
 	},
 	["Chromatic Blast"] = {
-		EnergyPerHarvest = { Min = 1, Max = 3 },
+		EnergyPerHarvest = { Min = 1, Max = 5 },
 		EnergyRequired = 24,
 		Radius = 15,
 		Count = 3,
@@ -174,6 +174,17 @@ FishConfig.Abilities = {
 		Buffs = {"OrangeAlgaeBoost"},
 		Description = "Grants a stack of Orange Boost, increasing Orange Algae production by 50% for 7 seconds."
 	},
+	["Sanctuary"] = {
+		EnergyPerHarvest = { Min = 1, Max = 5 },
+		EnergyRequired = 10,
+		Description = "spawn me a haven of my imagination. Spawns a sanctuary that that grants 'dreaming'. lasts for 10 seconds. along with that, during sanctuary, it spawns 25 explosive pieces in a spiral to collect algae.",
+		ExplosionCount = 15,
+		ExplosionDelay = 0.15,
+		RadiusStep = 1,
+		AngleStep = 36,
+		CollectionRadius = 6,
+		CollectionAmount = 12
+	},
 }
 
 -- ==================== PASSIVES REGISTRY ==================
@@ -199,9 +210,17 @@ FishConfig.Passives = {
 	},
 	["Mitosis"] = {
 		Name = "Mitosis",
-		Description = "1/100 chance on gather to create a temporary clone of a random fish in your aquarium for 17 seconds. The clone is neon blue and slightly transparent.",
-		Duration = 17,
-		Chance = 100, -- 1 in 100
+		Description = "After every 10 collects, Mitosis triggers: spawn a temporary clone of the fish that collects algae. Lasts 30 seconds. Limit 10.",
+		MaxClones = 10,
+		TriggerCount = 10,
+	},
+	["_my.safespace."] = {
+		Name = "_my.safespace.",
+		Description = "When collecting inside a Sanctuary, always mega crit, gain 100% MoveSpeed/Collection Speed, and harvest a 3x3 block.",
+		SanctuaryRadius = 15,
+		SpeedMultiplier = 2,
+		GatherMultiplier = 2,
+		HarvestRadius = 6.5,
 	},
 	["Trail of Light"] = {
 		Name = "Trail of Light",
@@ -254,6 +273,30 @@ FishConfig.Buffs = {
 		Multiplier = 0.5, -- +50% per stack
 		Description = function(s) return "+" .. (s*50) .. "% Green Algae" end,
 		Image = "rbxassetid://76687032697276", -- Placeholder
+	},
+	GreenGemBoost = {
+		Name = "Green Gem",
+		Stat = "GreenAlgae",
+		Duration = 900,
+		Multiplier = 1, -- +100% per stack
+		Description = function(s) return "+" .. (s*100) .. "% Green Algae" end,
+		Image = "rbxassetid://76687032697276", -- Placeholder
+	},
+	OrangeGemBoost = {
+		Name = "Orange Gem",
+		Stat = "OrangeAlgae",
+		Duration = 900,
+		Multiplier = 1,
+		Description = function(s) return "+" .. (s*100) .. "% Orange Algae" end,
+		Image = "rbxassetid://81956234626056",
+	},
+	PinkGemBoost = {
+		Name = "Pink Gem",
+		Stat = "PinkAlgae",
+		Duration = 900,
+		Multiplier = 1,
+		Description = function(s) return "+" .. (s*100) .. "% Pink Algae" end,
+		Image = "rbxassetid://80180445405238",
 	},
 	OrangeAlgaeBoost = {
 		Name = "Orange Boost",
@@ -361,6 +404,17 @@ FishConfig.Buffs = {
 		MaxStacks = 1,
 		Description = function(s) return "GO CRAZYYYYYYYYYYYYYYYY" end,
 		Image = "rbxassetid://113411057215867", -- Use Rhythm Fever icon for now
+	},
+	Dreaming = {
+		Name = "Dreaming",
+		Stat = {"CritChanceBonus", "MegaCritChance", "CritPowerBonus", "CapacityMultiplier"},
+		Duration = 30,
+		MaxStacks = 30,
+		CritChanceBonusAmount = 0.005,
+		MegaCritChanceBonusAmount = 0.005,
+		CritPowerBonusAmount = 0.05,
+		CapacityPercentGainAmount = 0.01,
+		Description = function(s) return "+" .. (s*0.5) .. "% Crit/Mega Crit Chance, +" .. (s*5) .. "% Crit Power, +" .. (s) .. "% Capacity" end,
 	},
 	RhythmFeverPlus = {
 		Name = "Rhythm Fever+",
@@ -660,6 +714,24 @@ FishConfig.Fish = {
 		AbilityName = "Descent From Heaven",
 		SecondaryAbilities = {"Solar Flare"},
 		Passive = "Trail of Light"
+	},
+	["Illusionary Fish"] = {
+		Name = "Illusionary Fish",
+		ModelName = "Illusionary Fish",
+		Rarity = "Mythic",
+		ColorTrait = "Colorless",
+		DecalId = "rbxassetid://87667845434617",
+		Description = "you're my visionary. be the good puppet that i need. let me harness your dreams, and in return, the illusion of freedom will consume you.",
+		BaseStats = {
+			GatherSpeed = 2,
+			GatherAmount = 20,
+			MoveSpeed = 30,
+			ConvertSpeed = 2,
+			ConvertAmount = 2500,
+			Attack = 80,			AttackSpeed = 1.0,
+		},
+		AbilityName = "Sanctuary",
+		Passive = "_my.safespace.",
 	},
 	["Mirror Fish"] = {
 		Name = "Mirror Fish",

@@ -150,6 +150,41 @@ function VisualController.BatchSpawn(pos, amount, color, isCrit, sizeScale, isMe
 end
 
 function VisualController.Start()
+	task.spawn(function()
+		local map = workspace:WaitForChild("Map", 10)
+		if not map then return end
+		
+		local topParts = {}
+		for _, part in ipairs(map:GetDescendants()) do
+			if part.Name == "Top" and part:IsA("BasePart") then
+				table.insert(topParts, {Part = part, OriginalTransparency = part.Transparency})
+			end
+		end
+		
+		RunService.RenderStepped:Connect(function()
+			local character = Players.LocalPlayer.Character
+			if not character then return end
+			local root = character:FindFirstChild("HumanoidRootPart")
+			if not root then return end
+			
+			for _, data in ipairs(topParts) do
+				local part = data.Part
+				if part.Parent then
+					local diff = part.Position.Y - root.Position.Y
+					if diff > 0 then
+						if diff >= 20 then
+							part.Transparency = 1
+						else
+							part.Transparency = data.OriginalTransparency + (1 - data.OriginalTransparency) * (diff / 20)
+						end
+					else
+						part.Transparency = data.OriginalTransparency
+					end
+				end
+			end
+		end)
+	end)
+
 	DataUpdateEvent.OnClientEvent:Connect(function(data)
 		localData = data
 	end)
@@ -196,6 +231,8 @@ function VisualController.Start()
 						local mainPart = mineModel:FindFirstChild("Main")
 						if mainPart then
 							local amt = mainPart:GetAttribute("AlgaeAmount")
+							local targetCap = mainPart:GetAttribute("TargetCapacity") or 1000
+							local rarityName = mainPart:GetAttribute("MineRarityName") or "Sea Mine"
 							local timeLeft = mainPart:GetAttribute("MineTimeLeft")
 							if amt then
 								local gui = mainPart:FindFirstChild("QuestIndicate") or mainPart:FindFirstChildWhichIsA("BillboardGui")
@@ -206,13 +243,13 @@ function VisualController.Start()
 										if algaeFrame then
 											local amountUI = algaeFrame:FindFirstChild("AlgaeAmount")
 											if amountUI then
-												amountUI.Text = FormatNumber(amt, useAbbr)
+												amountUI.Text = FormatNumber(amt, useAbbr) .. " / " .. FormatNumber(targetCap, useAbbr)
 											end
 											local timerUI = algaeFrame:FindFirstChild("Timer")
 											if timerUI and timeLeft then
 												local m = math.floor(timeLeft / 60)
 												local s = timeLeft % 60
-												timerUI.Text = string.format("%d:%02d", m, s)
+												timerUI.Text = rarityName .. " (" .. string.format("%d:%02d", m, s) .. ")"
 											end
 										end
 									end

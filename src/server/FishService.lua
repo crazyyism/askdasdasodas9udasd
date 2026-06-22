@@ -126,6 +126,22 @@ function FishService.Start()
         end)
     end)
 
+	local EvictFishEvent = Remotes:FindFirstChild("EvictFishEvent")
+	if not EvictFishEvent then
+		EvictFishEvent = Instance.new("RemoteEvent")
+		EvictFishEvent.Name = "EvictFishEvent"
+		EvictFishEvent.Parent = Remotes
+	end
+	
+	EvictFishEvent.OnServerEvent:Connect(function(player, fishIndex)
+		PlayerData.update(player, function(data)
+			if data.FishSchool and data.FishSchool[tostring(fishIndex)] then
+				data.FishSchool[tostring(fishIndex)] = nil
+				data._FishDirty = true
+			end
+			return data
+		end)
+	end)
 	
 	local FishStateRelay = Remotes:FindFirstChild("FishStateRelay")
 	if not FishStateRelay then
@@ -148,6 +164,7 @@ function FishService.Start()
 	
 	-- Fish DPS Loop (Server-side)
 	local fishCooldowns = {}
+	local playerLastTargets = {}
 	local lastDpsTick = os.clock()
 	game:GetService("RunService").Heartbeat:Connect(function()
 		local now = os.clock()
@@ -162,12 +179,35 @@ function FishService.Start()
 				-- Check for nearby mobs
 				local targetMob = nil
 				local shortestDist = 20
+				
+				-- First, look for any mobs actively chasing this player
+				local chasingMobs = {}
 				for _, mobData in ipairs(MobService.GetMobs()) do
-					if mobData.Mob and mobData.Mob.PrimaryPart then
+					if mobData.Mob and mobData.Mob.PrimaryPart and mobData.State == "Chasing" and mobData.Target == player then
+						table.insert(chasingMobs, mobData)
+					end
+				end
+				
+				if #chasingMobs > 0 then
+					local closestChasingMob = nil
+					local closestChasingDist = math.huge
+					for _, mobData in ipairs(chasingMobs) do
 						local dist = (mobData.Mob.PrimaryPart.Position - root.Position).Magnitude
-						if dist < shortestDist then
-							shortestDist = dist
-							targetMob = mobData.Mob
+						if dist < closestChasingDist then
+							closestChasingDist = dist
+							closestChasingMob = mobData.Mob
+						end
+					end
+					targetMob = closestChasingMob
+				else
+					-- Fallback to default proximity check (closest within 20 studs)
+					for _, mobData in ipairs(MobService.GetMobs()) do
+						if mobData.Mob and mobData.Mob.PrimaryPart then
+							local dist = (mobData.Mob.PrimaryPart.Position - root.Position).Magnitude
+							if dist < shortestDist then
+								shortestDist = dist
+								targetMob = mobData.Mob
+							end
 						end
 					end
 				end
@@ -187,6 +227,9 @@ function FishService.Start()
 						local pCooldowns = fishCooldowns[userId]
 						
 						for index, fishData in pairs(data.FishSchool) do
+							if not targetMob or not targetMob.Parent or not targetMob.PrimaryPart then
+								break
+							end
 							if type(fishData) == "table" and fishData.Id then
 								local fConfig = FishConfig.Fish[fishData.Id]
 								if fConfig and fConfig.BaseStats and fConfig.BaseStats.Attack then
@@ -252,8 +295,8 @@ function FishService.Start()
 							end
 						end
 						
-						if anyFishAttacked then
-							-- Tell client to make fish orbit
+						if playerLastTargets[userId] ~= targetMob then
+							playerLastTargets[userId] = targetMob
 							if FishStateRelay then
 								FishStateRelay:FireClient(player, {OrbitTarget = targetMob})
 							end
@@ -263,8 +306,11 @@ function FishService.Start()
 					-- Tell client to stop orbiting
 					local data = PlayerData.get(player)
 					if data and data.FishSchool then
-						if FishStateRelay then
-							FishStateRelay:FireClient(player, {OrbitTarget = nil})
+						if playerLastTargets[player.UserId] ~= nil then
+							playerLastTargets[player.UserId] = nil
+							if FishStateRelay then
+								FishStateRelay:FireClient(player, {OrbitTarget = nil})
+							end
 						end
 					end
 				end

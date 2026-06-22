@@ -117,6 +117,12 @@ local ToolConfig = {
 		ShurikenRange = 13,
 		Pattern = {},
 	},
+	["Eviction"] = {
+		DisplayName = "Eviction",
+		CapacityBurn = 0,
+		Cooldown = 0.5,
+		Pattern = {{0,0}}
+	},
 	["Default"] = {
 		DisplayName = "Tool",
 		CapacityBurn = 1,

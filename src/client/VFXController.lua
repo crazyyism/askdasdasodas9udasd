@@ -10,6 +10,15 @@ local rainmakerStates = {}
 local activeBlackHoles = {} -- [Player] = Sphere Instance
 local beamCache = {}
 
+local originalC0Cache = setmetatable({}, {__mode = "k"})
+
+local function getOriginalC0(motor)
+	if not originalC0Cache[motor] then
+		originalC0Cache[motor] = motor.C0
+	end
+	return originalC0Cache[motor]
+end
+
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
@@ -186,7 +195,7 @@ function VFXController.PlayRainmakerAbility(player)
 		local barrelSpeed = 0
 		local barrelAngle = 0
 		local barrelActive = true -- Start active immediately
-		local baseC0 = motor and motor.C0
+		local baseC0 = motor and getOriginalC0(motor)
 		
 		-- Start barrel rotation loop immediately
 		local updaterId = nextUpdaterId
@@ -215,6 +224,9 @@ function VFXController.PlayRainmakerAbility(player)
 			elseif barrelSpeed <= 0 and not barrelActive then
 				-- Fully stopped, disconnect
 				ActiveUpdaters[updaterId] = nil
+				if motor and baseC0 then
+					motor.C0 = baseC0
+				end
 			end
 		end
 		
@@ -496,7 +508,7 @@ function VFXController.HandleRainmakerState(player, state)
 		
 		-- Store BaseC0 if not exists
 		if motor and not d.BaseC0 then
-			d.BaseC0 = motor.C0
+			d.BaseC0 = getOriginalC0(motor)
 		end
 		
 		-- Start Loop if needed
@@ -531,6 +543,9 @@ function VFXController.HandleRainmakerState(player, state)
 					ActiveUpdaters[d.UpdaterId] = nil
 					d.UpdaterId = nil
 					d.Angle = 0 -- Reset?
+					if motor and d.BaseC0 then
+						motor.C0 = d.BaseC0
+					end
 				end
 			end
 		end
@@ -1054,6 +1069,805 @@ function VFXController.PlayDescentFromHeaven(player, hitboxPosition, extraData)
 	end)
 end
 
+function VFXController.PlaySunkissedMelee(targetPlayer, comboPhase)
+	local char = targetPlayer.Character
+	if not char or not char.PrimaryPart then return end
+
+	local vfxFolder = ReplicatedStorage:FindFirstChild("VFX")
+	local skVFX = vfxFolder and vfxFolder:FindFirstChild("SunkissedArt")
+	local rsSK = ReplicatedStorage:FindFirstChild("SunkissedArt")
+	
+	local soundName = "SunkissedArt" .. tostring(comboPhase == 0 and 3 or comboPhase)
+	local sfx = (rsSK and rsSK:FindFirstChild(soundName)) or ReplicatedStorage:FindFirstChild(soundName)
+	if sfx and sfx:IsA("Sound") then
+		local s = sfx:Clone()
+		s.Volume = s.Volume > 0 and s.Volume or 0.5
+		s.Parent = char.PrimaryPart
+		s:Play()
+		game.Debris:AddItem(s, 10)
+	end
+
+	if comboPhase == 1 then
+		local firstHit = skVFX and skVFX:FindFirstChild("FirstHit")
+		if firstHit then
+			local hitClone = firstHit:Clone()
+			hitClone.Parent = char.PrimaryPart
+			
+			local isLowDetail = localData and localData.Settings and localData.Settings.LowDetailMode
+			local detailMult = isLowDetail and 0.5 or 1.0
+			
+			for _, p in ipairs(hitClone:GetChildren()) do
+				if p:IsA("ParticleEmitter") then
+					local burstAmount = (p:GetAttribute("EmitCount") or p:GetAttribute("Count") or 25)
+					p:Emit(math.max(1, math.floor(burstAmount * detailMult)))
+				end
+			end
+			game.Debris:AddItem(hitClone, 3)
+		end
+
+	elseif comboPhase == 2 then
+		local secondHit = (skVFX and skVFX:FindFirstChild("SecondHit")) or (rsSK and rsSK:FindFirstChild("SecondHit"))
+		if secondHit then
+			local hitClone = secondHit:Clone()
+			hitClone.Parent = char.PrimaryPart
+			
+			local isLowDetail = localData and localData.Settings and localData.Settings.LowDetailMode
+			
+			for _, p in ipairs(hitClone:GetChildren()) do
+				if p:IsA("ParticleEmitter") then
+					if isLowDetail then
+						p.Rate = math.max(1, math.floor(p.Rate * 0.5))
+					end
+					p.Enabled = true
+				end
+			end
+			
+			task.delay(0.3, function()
+				if hitClone and hitClone.Parent then
+					for _, p in ipairs(hitClone:GetChildren()) do
+						if p:IsA("ParticleEmitter") then
+							p.Enabled = false
+						end
+					end
+				end
+			end)
+			
+			game.Debris:AddItem(hitClone, 4)
+		end
+	end
+end
+
+function VFXController.PlaySunkissedAbility(targetPlayer)
+	local char = targetPlayer.Character
+	if not char or not char.PrimaryPart then return end
+	local root = char.PrimaryPart
+	
+	local vfxFolder = ReplicatedStorage:FindFirstChild("VFX")
+	local skVFX = vfxFolder and vfxFolder:FindFirstChild("SunkissedArt")
+	local sunObj = (skVFX and skVFX:FindFirstChild("Sun")) or (ReplicatedStorage:FindFirstChild("SunkissedArt") and ReplicatedStorage.SunkissedArt:FindFirstChild("Sun"))
+	
+	local sunClone = nil
+	if sunObj then
+		sunClone = sunObj:Clone()
+		sunClone.Position = Vector3.new(0, 20, 0)
+		sunClone.Parent = root
+		for _, p in ipairs(sunClone:GetDescendants()) do
+			if p:IsA("ParticleEmitter") then p.Enabled = true end
+		end
+	end
+	
+	local isSfxDisabled = localData and localData.Settings and localData.Settings.DisableSFX
+	if not isSfxDisabled then
+		local sfx1 = (skVFX and skVFX:FindFirstChild("Ability1")) or (ReplicatedStorage:FindFirstChild("SunkissedArt") and ReplicatedStorage.SunkissedArt:FindFirstChild("Ability1")) or ReplicatedStorage:FindFirstChild("SunkissedArtAbility1")
+		if sfx1 and sfx1:IsA("Sound") then
+			local s1 = sfx1:Clone()
+			s1.Parent = root
+			s1:Play()
+			game.Debris:AddItem(s1, math.max(6, sfx1.TimeLength + 1))
+		end
+		
+		local sfx3 = (skVFX and skVFX:FindFirstChild("Ability3")) or (ReplicatedStorage:FindFirstChild("SunkissedArt") and ReplicatedStorage.SunkissedArt:FindFirstChild("Ability3")) or ReplicatedStorage:FindFirstChild("SunkissedArtAbility3")
+		if sfx3 and sfx3:IsA("Sound") then
+			local s3 = sfx3:Clone()
+			s3.Parent = root
+			s3:Play()
+			game.Debris:AddItem(s3, math.max(6, sfx3.TimeLength + 1))
+		end
+	end
+	
+	local beamsObj = (skVFX and skVFX:FindFirstChild("beams")) or (ReplicatedStorage:FindFirstChild("SunkissedArt") and ReplicatedStorage.SunkissedArt:FindFirstChild("beams"))
+	if beamsObj then
+		local beamsClone = beamsObj:Clone()
+		beamsClone.Parent = root
+		if beamsClone:IsA("Attachment") then beamsClone.Position = Vector3.new(0, -2.8, 0) end
+		
+		local bList = {}
+		for _, b in ipairs(beamsClone:GetDescendants()) do
+			if b:IsA("Beam") or b:IsA("ParticleEmitter") or b:IsA("Trail") then
+				table.insert(bList, {Obj = b, OrigTrans = b.Transparency})
+				local newKeypoints = {}
+				for _, kp in ipairs(b.Transparency.Keypoints) do
+					table.insert(newKeypoints, NumberSequenceKeypoint.new(kp.Time, 1, kp.Envelope))
+				end
+				b.Transparency = NumberSequence.new(newKeypoints)
+				if b:IsA("ParticleEmitter") or b:IsA("Trail") then b.Enabled = true end
+			end
+		end
+		
+		task.spawn(function()
+			local RunService = game:GetService("RunService")
+			local startTime = os.clock()
+			local duration = 3.0
+			local fadeInTime = 0.5
+			local fadeOutTime = 0.5
+			local disabledParticles = false
+			local conn
+			conn = RunService.Heartbeat:Connect(function()
+				if not beamsClone or not beamsClone.Parent then
+					if conn then conn:Disconnect() end
+					return
+				end
+				local elapsed = os.clock() - startTime
+				if elapsed >= duration then
+					beamsClone:Destroy()
+					if conn then conn:Disconnect() end
+					return
+				end
+				local alpha = 0
+				if elapsed < fadeInTime then
+					alpha = 1.0 - (elapsed / fadeInTime)
+				elseif elapsed >= duration - fadeOutTime then
+					alpha = (elapsed - (duration - fadeOutTime)) / fadeOutTime
+					if not disabledParticles then
+						disabledParticles = true
+						for _, b in ipairs(beamsClone:GetDescendants()) do
+							if b:IsA("ParticleEmitter") or b:IsA("Trail") then b.Enabled = false end
+						end
+					end
+				else
+					alpha = 0.0
+				end
+				for _, data in ipairs(bList) do
+					local newKeypoints = {}
+					for _, kp in ipairs(data.OrigTrans.Keypoints) do
+						local newVal = math.clamp(kp.Value + (1 - kp.Value) * alpha, 0, 1)
+						local newEnv = kp.Envelope
+						if newVal + newEnv > 1.0 then newEnv = 1.0 - newVal end
+						if newVal - newEnv < 0.0 then newEnv = newVal end
+						table.insert(newKeypoints, NumberSequenceKeypoint.new(kp.Time, newVal, newEnv))
+					end
+					data.Obj.Transparency = NumberSequence.new(newKeypoints)
+				end
+			end)
+		end)
+	end
+	
+	task.delay(1.0, function()
+		if not sunClone then return end
+		local pList = {}
+		for _, p in ipairs(sunClone:GetDescendants()) do
+			if p:IsA("ParticleEmitter") then
+				table.insert(pList, {Emitter = p, OrigSize = p.Size, OrigSpeed = p.Speed})
+			end
+		end
+		
+		local rightHand = char:FindFirstChild("RightHand")
+		if rightHand then
+			local attachWorldPos = root.CFrame:PointToWorldSpace(Vector3.new(0, 20, 0))
+			local localOffset = rightHand.CFrame:PointToObjectSpace(attachWorldPos)
+			sunClone.Parent = rightHand
+			sunClone.Position = localOffset
+			
+			local TweenService = game:GetService("TweenService")
+			local tweenDur = 1.4
+			local tsInfo = TweenInfo.new(tweenDur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			local tween = TweenService:Create(sunClone, tsInfo, {Position = Vector3.new(0, 0, 0)})
+			tween:Play()
+			
+			if #pList > 0 then
+				task.spawn(function()
+					local RunService = game:GetService("RunService")
+					local startTime = os.clock()
+					local conn
+					conn = RunService.Heartbeat:Connect(function()
+						if not sunClone or not sunClone.Parent then
+							conn:Disconnect()
+							return
+						end
+						local elapsed = os.clock() - startTime
+						if elapsed >= tweenDur then
+							elapsed = tweenDur
+							conn:Disconnect()
+						end
+						local alpha = elapsed / tweenDur
+						local easedAlpha = 1 - (1 - alpha) * (1 - alpha)
+						local scale = 1.0 - (0.666 * easedAlpha)
+						for _, data in ipairs(pList) do
+							local newKeypoints = {}
+							for _, kp in ipairs(data.OrigSize.Keypoints) do
+								local newVal = math.max(0, kp.Value * scale)
+								local newEnv = math.max(0, kp.Envelope * scale)
+								if newEnv > newVal * 2 then newEnv = newVal * 2 end
+								table.insert(newKeypoints, NumberSequenceKeypoint.new(kp.Time, newVal, newEnv))
+							end
+							data.Emitter.Size = NumberSequence.new(newKeypoints)
+							data.Emitter.Speed = NumberRange.new(data.OrigSpeed.Min * scale, data.OrigSpeed.Max * scale)
+						end
+					end)
+				end)
+			end
+		end
+	end)
+	
+	task.delay(2.8, function()
+		if sunClone then
+			for _, p in ipairs(sunClone:GetDescendants()) do
+				if p:IsA("ParticleEmitter") then p.Enabled = false end
+			end
+			game.Debris:AddItem(sunClone, 4)
+		end
+		
+		local burstObj = skVFX and skVFX:FindFirstChild("Burst")
+		if burstObj then
+			local burstClone = burstObj:Clone()
+			burstClone.Parent = workspace.Terrain
+			burstClone.WorldPosition = root.Position - Vector3.new(0, 2.7, 0)
+			for _, p in ipairs(burstClone:GetDescendants()) do
+				if p:IsA("ParticleEmitter") then p:Emit(p:GetAttribute("EmitCount") or p:GetAttribute("Count") or 40) end
+			end
+			game.Debris:AddItem(burstClone, 4)
+			
+			if not isSfxDisabled then
+				local sfx2 = (skVFX and skVFX:FindFirstChild("Ability2")) or (ReplicatedStorage:FindFirstChild("SunkissedArt") and ReplicatedStorage.SunkissedArt:FindFirstChild("Ability2")) or ReplicatedStorage:FindFirstChild("SunkissedArtAbility2")
+				if sfx2 and sfx2:IsA("Sound") then
+					local s2 = sfx2:Clone()
+					s2.Parent = burstClone
+					s2:Play()
+				end
+			end
+		end
+	end)
+end
+
+VFXController.ActiveSanctuaryVFX = {}
+
+function VFXController.PlaySanctuary(targetPlayer, customData)
+	if not targetPlayer or not customData or not customData.Position then return end
+	local position = customData.Position
+	
+	local vfxFolder = ReplicatedStorage:FindFirstChild("VFX")
+	if not vfxFolder then return end
+	local illusionaryFishFolder = vfxFolder:FindFirstChild("Illusionary Fish")
+	if not illusionaryFishFolder then return end
+	
+	local sanctuaryTemplate = illusionaryFishFolder:FindFirstChild("sanctuary")
+	if not sanctuaryTemplate then return end
+	
+	local sanctuary = sanctuaryTemplate:Clone()
+	sanctuary.Anchored = true
+	sanctuary.CanCollide = false
+	local spawnPos = position + Vector3.new(0, 0.45, 0)
+	sanctuary.Position = spawnPos
+	sanctuary.Parent = workspace.Terrain
+	
+	local spsan = illusionaryFishFolder:FindFirstChild("Spsan")
+	local spsan2 = illusionaryFishFolder:FindFirstChild("Spsan2")
+	if spsan then
+		PlaySFX(spsan, sanctuary)
+	end
+	if spsan2 then
+		local s2 = PlaySFX(spsan2, sanctuary, 6)
+		if s2 then
+			task.delay(2.5, function()
+				if s2 and s2.Parent then
+					local fadeTween = TweenService:Create(s2, TweenInfo.new(2.5, Enum.EasingStyle.Linear), {Volume = 0})
+					fadeTween:Play()
+				end
+			end)
+		end
+	end
+	
+	-- Enable all particles and store original sizes
+	for _, child in ipairs(sanctuary:GetDescendants()) do
+		if child:IsA("ParticleEmitter") then
+			child.Enabled = true
+		end
+	end
+	
+	local originalSize = sanctuary.Size
+	local originalBeams = {}
+	local floatingParts = {}
+	
+	local illudedAtt = sanctuary:FindFirstChild("Illuded", true)
+	local illudedFloatData = nil
+	if illudedAtt then
+		illudedFloatData = {
+			OriginalCFrame = illudedAtt.CFrame,
+			OriginalPosition = illudedAtt.Position,
+			RandSpeed = math.random(8, 15) / 10,
+			RandOffset = math.random() * 2 * math.pi,
+			RotX = 0,
+			RotY = math.rad(30),
+			RotZ = 0,
+		}
+	end
+	
+	local posOffset = spawnPos - sanctuaryTemplate.Position
+	for _, child in ipairs(sanctuary:GetChildren()) do
+		if child:IsA("BasePart") then
+			child.Position = child.Position + posOffset
+			child.Anchored = true
+			child.CanCollide = false
+			table.insert(floatingParts, {
+				Part = child,
+				OriginalCFrame = child.CFrame,
+				OriginalSize = child.Size,
+				RelativePos = child.Position - spawnPos,
+				IsModel = false,
+				RandSpeed = math.random(8, 15) / 10,
+				RandOffset = math.random() * 2 * math.pi,
+				RotX = math.random(-8, 8) * 0.1,
+				RotY = math.random(-8, 8) * 0.1,
+				RotZ = math.random(-8, 8) * 0.1,
+				RiseDelay = math.random() * 0.5,
+				RiseDuration = 1.0 + math.random() * 1.5
+			})
+		elseif child:IsA("Model") then
+			local pivot = child:GetPivot()
+			child:PivotTo(pivot + posOffset)
+			for _, p in ipairs(child:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.Anchored = true
+					p.CanCollide = false
+				end
+			end
+			table.insert(floatingParts, {
+				Part = child,
+				OriginalCFrame = child:GetPivot(),
+				OriginalSize = child:GetScale(),
+				RelativePos = child:GetPivot().Position - spawnPos,
+				IsModel = true,
+				RandSpeed = math.random(8, 15) / 10,
+				RandOffset = math.random() * 2 * math.pi,
+				RotX = math.random(-8, 8) * 0.1,
+				RotY = math.random(-8, 8) * 0.1,
+				RotZ = math.random(-8, 8) * 0.1,
+				RiseDelay = math.random() * 0.5,
+				RiseDuration = 1.0 + math.random() * 1.5
+			})
+		end
+	end
+	
+	
+	for _, child in ipairs(sanctuary:GetDescendants()) do
+		if child:IsA("Beam") then
+			originalBeams[child] = {
+				Width0 = child.Width0,
+				Width1 = child.Width1
+			}
+		elseif child:IsA("Attachment") then
+			originalBeams[child] = {
+				Position = child.Position
+			}
+		end
+	end
+	
+	-- Set to small size
+	local startScale = 0.05
+	sanctuary.Size = originalSize * startScale
+	for obj, data in pairs(originalBeams) do
+		if obj:IsA("Beam") then
+			obj.Width0 = data.Width0 * startScale
+			obj.Width1 = data.Width1 * startScale
+		elseif obj:IsA("Attachment") then
+			obj.Position = data.Position * startScale
+		end
+	end
+	for _, pData in ipairs(floatingParts) do
+		if pData.IsModel then
+			pData.Part:ScaleTo(pData.OriginalSize * startScale)
+		else
+			pData.Part.Size = pData.OriginalSize * startScale
+		end
+	end
+	
+	-- Tween up to original size
+	local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+	
+	local scaleValue = Instance.new("NumberValue")
+	scaleValue.Value = startScale
+	
+	local state = {IsOrbiting = false}
+	
+	local conn = scaleValue.Changed:Connect(function(scale)
+		sanctuary.Size = originalSize * scale
+		for obj, data in pairs(originalBeams) do
+			if obj:IsA("Beam") then
+				obj.Width0 = data.Width0 * scale
+				obj.Width1 = data.Width1 * scale
+			elseif obj:IsA("Attachment") then
+				obj.Position = data.Position * scale
+			end
+		end
+		
+		if not state.IsOrbiting then
+			for _, pData in ipairs(floatingParts) do
+				if pData.Part.Parent then
+					if pData.IsModel then
+						pData.Part:ScaleTo(math.max(0.001, pData.OriginalSize * scale))
+					else
+						pData.Part.Size = pData.OriginalSize * scale
+					end
+				end
+			end
+		end
+	end)
+	
+	local t = 0
+	local floatConn
+	floatConn = RunService.RenderStepped:Connect(function(dt)
+		t = t + dt
+		local currentScale = scaleValue.Value
+		
+		if illudedAtt and illudedFloatData then
+			local floatOffset = math.sin((t * illudedFloatData.RandSpeed) + illudedFloatData.RandOffset) * 0.8
+			local currentRot = CFrame.Angles(t * illudedFloatData.RotX, t * illudedFloatData.RotY, t * illudedFloatData.RotZ)
+			
+			local scaledPos = illudedFloatData.OriginalPosition * currentScale
+			illudedAtt.CFrame = CFrame.new(scaledPos + Vector3.new(0, floatOffset, 0)) * currentRot * illudedFloatData.OriginalCFrame.Rotation
+		end
+		
+		for _, pData in ipairs(floatingParts) do
+			if pData.Part.Parent then
+				local riseTime = math.max(0, t - pData.RiseDelay)
+				local rise = math.min(1, riseTime / pData.RiseDuration)
+				rise = 1 - math.pow(1 - rise, 3) -- Smooth cubic out
+				
+				local floatOffset = math.sin((t * pData.RandSpeed) + pData.RandOffset) * 0.8 * rise
+				local yOffset = -5 * (1 - rise)
+				
+				local currentRot = CFrame.Angles(t * pData.RotX, t * pData.RotY, t * pData.RotZ)
+				local scaledPos = spawnPos + (pData.RelativePos * currentScale)
+				
+				local newCFrame = CFrame.new(scaledPos + Vector3.new(0, yOffset + floatOffset, 0)) * currentRot * pData.OriginalCFrame.Rotation
+				
+				if pData.IsModel then
+					pData.Part:PivotTo(newCFrame)
+				else
+					pData.Part.CFrame = newCFrame
+				end
+			end
+		end
+	end)
+	
+	local tweenUp = TweenService:Create(scaleValue, tweenInfo, {Value = 1.5})
+	tweenUp:Play()
+	
+	-- 10 seconds later, tween down and destroy
+	local fadeThread = task.delay(10, function()
+		if floatConn then floatConn:Disconnect() end
+		
+		for _, pData in ipairs(floatingParts) do
+			local part = pData.Part
+			if part and part.Parent then
+				part.Parent = workspace.Terrain
+				
+				local fallOffset = Vector3.new(0, -8, 0)
+				local randomRot = CFrame.Angles(math.random(-3,3), math.random(-3,3), math.random(-3,3))
+				
+				if pData.IsModel then
+					for _, p in ipairs(part:GetDescendants()) do
+						if p:IsA("BasePart") then
+							p.Anchored = true
+							p.CanCollide = false
+							TweenService:Create(p, TweenInfo.new(2.0, Enum.EasingStyle.Linear), {Transparency = 1}):Play()
+						end
+					end
+					
+					local cv = Instance.new("CFrameValue")
+					cv.Value = part:GetPivot()
+					cv.Changed:Connect(function(val)
+						if part and part.Parent then
+							part:PivotTo(val)
+						end
+					end)
+					
+					local fadeTween = TweenService:Create(cv, TweenInfo.new(2.0, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+						Value = (cv.Value * randomRot) + fallOffset
+					})
+					fadeTween:Play()
+					Debris:AddItem(cv, 2.1)
+				else
+					part.Anchored = true
+					part.CanCollide = false
+					
+					local fadeTween = TweenService:Create(part, TweenInfo.new(2.0, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+						CFrame = (part.CFrame * randomRot) + fallOffset,
+						Transparency = 1
+					})
+					fadeTween:Play()
+				end
+				
+				Debris:AddItem(part, 2.1)
+			end
+		end
+		
+		for _, child in ipairs(sanctuary:GetDescendants()) do
+			if child:IsA("ParticleEmitter") then
+				child.Enabled = false
+			end
+		end
+		
+		local tweenDownInfo = TweenInfo.new(2.0, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		local tweenDown = TweenService:Create(scaleValue, tweenDownInfo, {Value = 0})
+		tweenDown:Play()
+		tweenDown.Completed:Wait()
+		if conn then conn:Disconnect() end
+		sanctuary:Destroy()
+		scaleValue:Destroy()
+		
+		VFXController.ActiveSanctuaryVFX[targetPlayer.UserId] = nil
+	end)
+	
+	VFXController.ActiveSanctuaryVFX[targetPlayer.UserId] = {
+		Model = sanctuary,
+		FloatingParts = floatingParts,
+		FloatConn = floatConn,
+		ScaleValue = scaleValue,
+		FadeThread = fadeThread,
+		State = state
+	}
+end
+
+function VFXController.PlaySanctuaryBullets(targetPlayer, customData)
+	if not customData or not customData.Position then return end
+	local position = customData.Position
+	local count = customData.ExplosionCount or 40
+	local delay = customData.ExplosionDelay or 0.05
+	local rStep = customData.RadiusStep or 1.0
+	local angleStep = customData.AngleStep or 36
+	
+	local vfxFolder = ReplicatedStorage:FindFirstChild("VFX")
+	local illusionaryFishFolder = vfxFolder and vfxFolder:FindFirstChild("Illusionary Fish")
+	local bulletTemplate = illusionaryFishFolder and illusionaryFishFolder:FindFirstChild("Bullet")
+	local spirallusionFolder = illusionaryFishFolder and illusionaryFishFolder:FindFirstChild("spirallusion")
+	local spawnAttTemplate = spirallusionFolder and spirallusionFolder:FindFirstChild("spawn")
+	local expl1 = illusionaryFishFolder and illusionaryFishFolder:FindFirstChild("Expl1")
+	local expl2 = illusionaryFishFolder and illusionaryFishFolder:FindFirstChild("Expl2")
+	
+	if not bulletTemplate or not spawnAttTemplate then return end
+	
+	-- Find the Illuded attachment from the active sanctuary
+	local activeSanc = VFXController.ActiveSanctuaryVFX[targetPlayer.UserId]
+	local startPos = position + Vector3.new(0, 15, 0) -- default fallback
+	if activeSanc and activeSanc.Model then
+		local illudedAtt = activeSanc.Model:FindFirstChild("Illuded", true)
+		if illudedAtt then
+			startPos = illudedAtt.WorldPosition
+		end
+	end
+	
+	-- Play Spirallusion Spawn SFX at startPos
+	local spawnSfx = illusionaryFishFolder:FindFirstChild("Spawn")
+	if spawnSfx then
+		local anchor = Instance.new("Part")
+		anchor.Size = Vector3.new(0.1, 0.1, 0.1)
+		anchor.Transparency = 1
+		anchor.Anchored = true
+		anchor.CanCollide = false
+		anchor.Position = startPos
+		anchor.Parent = workspace.Terrain
+		Debris:AddItem(anchor, 5)
+		PlaySFX(spawnSfx, anchor)
+	end
+	
+	for i = 1, count do
+		task.delay(i * delay, function()
+			local radius = i * rStep
+			local angle = math.rad(i * angleStep)
+			local offset = Vector3.new(math.cos(angle) * radius, 1.5, math.sin(angle) * radius)
+			local endPos = position + offset
+			
+			local bulletDuration = 0.8 -- fixed duration to match server delay
+			local bullet = bulletTemplate:Clone()
+			
+			if bullet:IsA("Attachment") then
+				local carrier = Instance.new("Part")
+				carrier.Name = "BulletCarrier"
+				carrier.Transparency = 1
+				carrier.Size = Vector3.new(0.5,0.5,0.5)
+				carrier.CanCollide = false
+				carrier.Anchored = true
+				carrier.Position = startPos
+				carrier.Parent = workspace.Terrain
+				bullet.Parent = carrier
+				bullet = carrier
+			else
+				bullet.Parent = workspace.Terrain
+				bullet.CFrame = CFrame.new(startPos)
+				bullet.Anchored = true
+				bullet.CanCollide = false
+			end
+			
+			local startTime = os.clock()
+			local midPoint = (startPos + endPos) / 2
+			-- Rainmaker uses 50 height, user wants curve like rainmaker but slower. 
+			local height = math.max((startPos - endPos).Magnitude * 0.5, 20) 
+			local controlPoint = midPoint + Vector3.new(0, height, 0)
+			
+			local forward = (endPos - startPos).Unit
+			local up = Vector3.new(0, 1, 0)
+			local right = forward:Cross(up)
+			if right.Magnitude < 0.001 then right = Vector3.new(1, 0, 0) end
+			
+			local spreadRotation = CFrame.fromAxisAngle(forward, math.random() * math.pi * 2)
+			local spreadRight = spreadRotation:VectorToWorldSpace(right)
+			
+			local connection
+			connection = RunService.RenderStepped:Connect(function()
+				local t = math.clamp((os.clock() - startTime) / bulletDuration, 0, 1)
+				
+				local l1 = startPos:Lerp(controlPoint, t)
+				local l2 = controlPoint:Lerp(endPos, t)
+				local currentPos = l1:Lerp(l2, t)
+				
+				local amp = math.sin(t * math.pi) * 10
+				local wobbleOffset = spreadRight * math.sin(t * math.pi * 4) * amp
+				
+				local finalPos = currentPos + wobbleOffset
+				local tangent = (2 * (1-t) * (controlPoint - startPos) + 2 * t * (endPos - controlPoint)).Unit
+				
+				if tangent.Magnitude > 0 then
+					bullet.CFrame = CFrame.lookAt(finalPos, finalPos + tangent) * CFrame.Angles(math.rad(90), 0, 0)
+				else
+					bullet.CFrame = CFrame.new(finalPos)
+				end
+				
+				if t >= 1 then
+					connection:Disconnect()
+					bullet:Destroy()
+					
+					-- Explosion
+					local anchor = Instance.new("Part")
+					anchor.Size = Vector3.new(0.1, 0.1, 0.1)
+					anchor.Transparency = 1
+					anchor.Anchored = true
+					anchor.CanCollide = false
+					anchor.Position = endPos
+					anchor.Parent = workspace.Terrain
+					Debris:AddItem(anchor, 2)
+					
+					local newAtt = spawnAttTemplate:Clone()
+					newAtt.Parent = anchor
+					for _, child in ipairs(newAtt:GetChildren()) do
+						if child:IsA("ParticleEmitter") then
+							local emitCount = child:GetAttribute("emitcount") or 10
+							child:Emit(emitCount)
+						end
+					end
+					
+					if expl1 then PlaySFX(expl1, anchor) end
+					if expl2 then PlaySFX(expl2, anchor) end
+				end
+			end)
+		end)
+	end
+end
+
+function VFXController.PlayMobCollectSparkles(startPos, numSparkles)
+	local char = Players.LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	local vfxFolder = ReplicatedStorage:FindFirstChild("VFX")
+	local sparkleTemplate = vfxFolder and vfxFolder:FindFirstChild("CollectSparkle")
+	if not sparkleTemplate then
+		warn("VFXController: CollectSparkle template missing from ReplicatedStorage.VFX!")
+		return
+	end
+	
+	numSparkles = numSparkles or 5
+	for i = 1, numSparkles do
+		task.spawn(function()
+			-- Staggered delay for organic visual spread
+			task.wait((i - 1) * 0.05 + math.random() * 0.05)
+			
+			local currentChar = Players.LocalPlayer.Character
+			local currentHrp = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
+			if not currentHrp then return end
+			
+			local sparkle = sparkleTemplate:Clone()
+			sparkle.CFrame = CFrame.new(startPos)
+			sparkle.Anchored = true
+			sparkle.CanCollide = false
+			sparkle.Parent = workspace
+			
+			-- Emitters and Trails cache
+			local originalSizes = {}
+			local originalTrailWidths = {}
+			
+			for _, child in ipairs(sparkle:GetDescendants()) do
+				if child:IsA("ParticleEmitter") then
+					originalSizes[child] = child.Size
+					child.Enabled = true
+				elseif child:IsA("Trail") then
+					originalTrailWidths[child] = child.WidthScale
+					child.Enabled = true
+				end
+			end
+			
+			local duration = 0.8 + math.random() * 0.4
+			local startTime = os.clock()
+			
+			-- Calculate random sideways & height offsets for the parabola/curve
+			local angle = math.random() * math.pi * 2
+			local sideDist = math.random(6, 18)
+			local controlOffset = Vector3.new(
+				math.cos(angle) * sideDist,
+				math.random(12, 24),
+				math.sin(angle) * sideDist
+			)
+			
+			local connection
+			connection = RunService.RenderStepped:Connect(function()
+				local activeChar = Players.LocalPlayer.Character
+				local activeHrp = activeChar and activeChar:FindFirstChild("HumanoidRootPart")
+				if not activeHrp then
+					connection:Disconnect()
+					sparkle:Destroy()
+					return
+				end
+				
+				local elapsed = os.clock() - startTime
+				local t = math.clamp(elapsed / duration, 0, 1)
+				
+				-- Quadratic InOut Easing:
+				local easedT
+				if t < 0.5 then
+					easedT = 2 * t * t
+				else
+					easedT = -1 + (4 - 2 * t) * t
+				end
+				
+				-- Dynamic target update to track moving player
+				local playerPos = activeHrp.Position
+				local controlPoint = startPos:Lerp(playerPos, 0.5) + controlOffset
+				
+				-- 3-Point Bezier Curve math
+				local p1 = startPos:Lerp(controlPoint, easedT)
+				local p2 = controlPoint:Lerp(playerPos, easedT)
+				local finalPos = p1:Lerp(p2, easedT)
+				
+				sparkle.CFrame = CFrame.new(finalPos)
+				
+				-- Dynamically shrink emitters and trails
+				local sparkleScaleFactor = (1 - t) * (1 + 4 * t)
+				local shrinkFactor = 1 - t
+				for emitter, origSize in pairs(originalSizes) do
+					local kps = {}
+					for _, kp in ipairs(origSize.Keypoints) do
+						table.insert(kps, NumberSequenceKeypoint.new(kp.Time, math.max(0, kp.Value * sparkleScaleFactor), math.max(0, kp.Envelope * sparkleScaleFactor)))
+					end
+					emitter.Size = NumberSequence.new(kps)
+				end
+				
+				for trail, origWidth in pairs(originalTrailWidths) do
+					local kps = {}
+					for _, kp in ipairs(origWidth.Keypoints) do
+						table.insert(kps, NumberSequenceKeypoint.new(kp.Time, math.max(0, kp.Value * shrinkFactor)))
+					end
+					trail.WidthScale = NumberSequence.new(kps)
+				end
+				
+				if t >= 1 then
+					connection:Disconnect()
+					sparkle:Destroy()
+				end
+			end)
+		end)
+	end
+end
+
 function VFXController.Start()
 	DataUpdateEvent.OnClientEvent:Connect(function(data)
 		localData = data
@@ -1064,6 +1878,21 @@ function VFXController.Start()
 	
 	if VFXReplication then
 		VFXReplication.OnClientEvent:Connect(function(vfxName, targetPlayer, targetIndex, customData, extraData, extraData2)
+			if vfxName == "MobCollectSparkle" then
+				VFXController.PlayMobCollectSparkles(customData, extraData)
+				return
+			end
+			if vfxName == "Sanctuary" then
+				if customData and customData.Position then
+					VFXController.PlaySanctuary(targetPlayer, customData)
+				end
+				return
+			end
+			if vfxName == "SanctuaryBullets" then
+				VFXController.PlaySanctuaryBullets(targetPlayer, customData)
+				return
+			end
+			
 			if vfxName == "ChromaticBlast" then
 				if extraData and extraData.Position then
 					local playData = {Color = customData, Position = extraData.Position}
@@ -1168,6 +1997,14 @@ function VFXController.Start()
 				end
 			else
 				-- Foreign Player Logic
+				if vfxName == "SunkissedMelee" then
+					VFXController.PlaySunkissedMelee(targetPlayer, customData)
+					return
+				end
+				if vfxName == "SunkissedAbility" then
+					VFXController.PlaySunkissedAbility(targetPlayer)
+					return
+				end
 				-- Future: If fish are replicated...
 			end
 		end)

@@ -35,373 +35,11 @@ QuestConfig.QuestChain = {
 }
 
 
--- ============================================================
--- DIALOGUE
--- Each quest has _Start, _InProgress, and _Complete dialogue.
--- WelcomeDialogue is the initial greeting (starts FreshwaterCleaning).
--- NoMoreQuests is shown when all quests are finished.
--- ============================================================
-
-
 QuestConfig.Dialogue = {
-
-
-    WelcomeDialogue = {
+    NoMoreQuests = {
         Messages = {
-            "Hello there!",
-            "Let me introduce myself first, I am the Elder Turtle!",
-            "I see that you have a fishing net and a pouch on you,",
-            "You're here to be own a fish hatchery, right?",
-            "Well, that's good news, because I used to be a pretty notorious fish hatcherer myself!",
-            "If you are willing to follow my demands, I promise you that you will be one of the best in the world!",
-            "First off, lets have you collect 200 Algae in the Freshwater Reef,",
-            "If you are confused on where that is, it is located on the shorelines of the lake!",
-            "Best of luck new adventurer!"
-        },
-        QuestID = "FreshwaterCleaning"
-    },
-
-
-    FreshwaterCleaning_Complete = {
-        Messages = {
-            "Great job! You're already getting the hang of this!",
-            "Here is a basic egg, you are able to drag it out of your inventory to an empty slot in your aquarium!",
-            "Come back when you've hatched your first fish!"
-        },
-        FinishQuestID = "FreshwaterCleaning"
-    },
-
-
-    FreshwaterCleaning_InProgress = {
-        Messages = {
-            "Fish are quite fascinating, and if you haven't noticed already, you have one in your inventory!",
-            "To hatch it, simply drag it out of your inventory, and you will be able to hatch your first fish!"
+            "You finished all the quests, congratulations!"
         }
-    },
-
-
-    -- Quest 2
-    AFavoriteColor_Start = {
-        Messages = {
-            "Welcome back!",
-            "If you haven't noticed already, there are different reefs around the map!",
-            "Each one of them has their special trait",
-            "For example, the Sun Reef, the one on that little uprise in the lake,",
-            "mainly contains orange algae! And although it is much smaller than the Freshwater Reef,",
-            "It regrows its algae MUCH faster!",
-            "Now, I want you to collect 250 orange algae from ANY reef!",
-            "Come back when you're done!"
-        },
-        QuestID = "AFavoriteColor"
-    },
-    AFavoriteColor_InProgress = {
-        Messages = {
-            "Have I told you I love the color orange?",
-            "Most of what I like to eat is orange, for example, honey!",
-            "Maybe the other turtles would think the same, I know Lava Turtle probably would."
-        }
-    },
-    AFavoriteColor_Complete = {
-        Messages = {
-            "Thanks for helping me out!",
-            "Come back for more quests!"
-        },
-        FinishQuestID = "AFavoriteColor"
-    },
-
-
-    -- Quest 3
-    BabySteps_Start = {
-        Messages = {
-            "Hello!",
-            "I forgot to tell you what I gave you previously!",
-            "These are called Zooplankton, they change your fish to a different one.",
-            "Zooplankton are able to change your fish into majority of fish in the index!",
-            "Some fish are rarer than others, and are listed in different types of rarities.",
-            "They include: Rare fish, Epic fish, Legendary fish, and Mythic fish",
-            "With mythic fish being the rarest in the game!",
-            "Maybe you'll be lucky with your zooplankton and you'll get a really good fish!",
-            "They'll be handy for what I want you to do anyway",
-            "Now, collect 250 Green, Orange, and Pink algae from anywhere around the map!",
-        },
-        QuestID = "BabySteps"
-    },
-    BabySteps_InProgress = {
-        Messages = {
-            "There are also eggs that you can purchase for pearls! Which I'll introduce later.",
-            "Eggs let you hatch rarer fish, but they can also be used to purchase good equipment!"
-        }
-    },
-    BabySteps_Complete = {
-        Messages = {
-            "Nice job!",
-            "I hope that zooplankton gave you something good!",
-            "Here is another Zooplankton to use in your collection!"
-        },
-        FinishQuestID = "BabySteps"
-    },
-
-
-    CoralCodependence_Start = {
-        Messages = {
-            "Remember I told you that there were many different reefs around the map?",
-            "Well it turns out I need all three colors again!",
-            "Except, I need you to do it in both freshwater and coral reef.",
-            "That's all! Come back when you're done!"
-        },
-        QuestID = "CoralCodependence"
-    },
-    CoralCodependence_InProgress = {
-        Messages = {
-            "If you haven't already, you may want to go get better equippment."
-        }
-    },
-    CoralCodependence_Complete = {
-        Messages = {
-            "Nice job! You're quite a natural at this!",
-            "Talk to me when you're ready!"
-        },
-        FinishQuestID = "CoralCodependence"
-    },
-
-
-    Trigonometry_Start = {
-        Messages = {
-            "Did I ever tell you how bad I am at math?",
-            "I thought math was supposed to be about putting cookies in a jar",
-            "Not whatever this 'Sine' or 'Tangent' stuff is, it drives me CRAZY!!!",
-            "Thank goodness I'm not in that suffocating classroom anymore. I barely passed with a C-",
-            "That was a long, long, looong time ago, I don't have to deal with my teacher's yapping anymore.",
-            "Well, actually, the only thing I DO remember, is that all angles inside of a triangle are equivalent to 180 degrees!",
-            "I can't believe thats the ONLY thing I remember from that class.",
-            "Oops, I'm off topic! Sorry about that",
-            "Collect me 4,000 Algae from the Trash Reef!"
-        },
-        QuestID = "Trigonometry"
-    },
-    Trigonometry_InProgress = {
-        Messages = {
-            "snore zzzzzzz"
-        }
-    },
-    Trigonometry_Complete = {
-        Messages = {
-            "How's it been?",
-            "I sure hope you're ready for whatever math test you have later on.",
-            "Anyways,",
-            "In a Euclidean space, the sum of angles of a triangle equals a straight angle (180 degrees, π radians, two right angles, or a half-turn). A triangle has three angles, and has one at each vertex, bounded by a pair of adjacent sides.The sum can be computed directly using the definition of angle based on the dot product and trigonometric identities, or more quickly by reducing to the two-dimensional case and using Euler's identity.It was unknown for a long time whether other geometries exist, for which this sum is different. The influence of this problem on mathematics was particularly strong during the 19th century. Ultimately, the answer was proven to be positive: in other spaces (geometries) this sum can be greater or lesser, but it then must depend on the triangle. Its difference from 180° is a case of angular defect and serves as an important distinction for geometric systems. (Wikipedia Contributors. \"Sum of Angles of a Triangle.\" Wikipedia, Wikimedia Foundation, 10 Feb. 2025.)",
-            "I'm going back to sleep."
-        },
-        FinishQuestID = "Trigonometry"
-    },
-
-
-    HistoryRepeatsItself_Start = {
-        Messages = {
-            "Welcome back!",
-            "It's quite rare that I see people here at all. I don't think I've ever told you that.",
-            "I take it for granted sometimes, it's never my intention to be so pushy and demanding. I'm just excited, that's all.",
-            "...",
-            "Sometimes, I question what life is.",
-            "What is the point of living if you die anyways?",
-            "Is it really certain you live once only? And after you die, what happens?",
-            "Was there ever a before, did I live before?",
-            "When you die, does your consciousness continue sometime far, far in the future, where maybe,",
-            "Your brain structure and consciousness is fully recreated in some kind of manner?",
-            "Imagine how long that'd take, you'd probably be witnessing MULTIPLE universal resets before it ever happens again.",
-            "This makes me realize how lucky I am to be alive. Don't waste your time and effort to contemplate whether or not there is anything after life.",
-            "You'll be stuck in a cycle, and you'll never be able to live fully.",
-            "Anyways, back to reality, I need you to collect 3,500 algae from both the Trash Reef and the Sun Reef."
-        },
-        QuestID = "HistoryRepeatsItself"
-    },
-    HistoryRepeatsItself_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    HistoryRepeatsItself_Complete = {
-        Messages = {
-            "Life is something you need to appreciate once in a while",
-            "I don't mean to ruin your mood, but your life will end.",
-            "It doesn't matter how much you try to resist, how much you do to stop it, you will die.",
-            "And yes, people will just tell you to 'live your life' and blah blah blah..",
-            "But it's so much harder to say that when you're already raised within boundaries stated to you from birth.",
-            "Living is to understand that death is inevitable. When you understand that, you'll learn to cherish what you do.",
-            "Anyways, sorry for the existential dialogue, I just wanted to add on that you have 5 more quests until you earn a sapphire egg!",
-            "Come back again!"
-        },
-        FinishQuestID = "HistoryRepeatsItself"
-    },
-
-
-    RunicRebel_Start = {
-        Messages = {
-            "When walking around the map, you've definitely seen those gates that have a number",
-            "That means that you need THAT amount of fish to enter that zone",
-            "Unfortunately, that means you'll need 5 fish to do the next quest, so I hope you really got those fish!",
-            "I want you to go to the Runic Reef, the reef that isn't a rectangle, or square, wait what is it?",
-            "Just go collect 9,000 algae from that reef, maybe that reef can help explain why I saw that weird algae type a bit ago.."
-        },
-        QuestID = "RunicRebel"
-    },
-    RunicRebel_InProgress = {
-        Messages = {
-            "Fish are put into 4 different archetypes, Orange, Pink, Green, and Colorless.",
-            "Each corresponding color collects 100% more algae of that type per harvest."
-        }
-    },
-    RunicRebel_Complete = {
-        Messages = {
-            "Aye, thanks for helping me out man!",
-            "I'll be able to examine this algae a bit more closely now!",
-            "Well, see you later!"
-        },
-        FinishQuestID = "RunicRebel"
-    },
-
-
-    TakeFlight_Start = {
-        Messages = {
-            "You tired of walking huh? I could've guessed given the fact that there's not much transport around the map.",
-            "Too bad you're gonna have to keep walking",
-            "Unless you purchase that Hydroglider in the Noob Shop!",
-            "It's quite handy, you can control where you go based off where you're looking!",
-            "Anyways, I'll give you the necessary resources to get it IF you collect 8,000 algae from every single field in the starting area, how's that sound?",
-            "Good luck!"
-        },
-        QuestID = "TakeFlight"
-    },
-    TakeFlight_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    TakeFlight_Complete = {
-        Messages = {
-            "Must've been one kind of a walk huh?",
-            "Here's your reward!!! Good luck!!"
-        },
-        FinishQuestID = "TakeFlight"
-    },
-
-
-    MeaninglessLove_Start = {
-        Messages = {
-            "I remember back in my youth I had bright aspirations of being an athlete, specifically a track runner.",
-            "It's the kind of aspiration where it turned into obsession.",
-            "Hold on there's a name for this...",
-            "Passion? I don't know, probably something like that.",
-            "Each and every day I'd hop the fence of my local school's track and practice everything.",
-            "Even on days I'm injured, or days where I don't feel in perfect shape,",
-            "I'd always find myself almost attracted to the track.",
-            "Every stride, every step, it always pushed me further beyond what I believed I could do.",
-            "Dreams I have of being the fastest in the school, fastest in the state, fastest in the nation.",
-            "It felt like my life had MEANING for once.",
-            "Meaning that I've always yearned for.",
-            "...",
-            "What's that?",
-            "Oh yeah, you need a quest from me.",
-            "Sorry about that, uhhh just go collect 15,000 algae from these reefs, and have 250 abilities committed total."
-        },
-        QuestID = "MeaninglessLove"
-    },
-    MeaninglessLove_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    MeaninglessLove_Complete = {
-        Messages = {
-            "Congrats!! Mr. Crazyyism is too lazy to give me much dialogue to say here...",
-            "Well, here's some fish feed and a Sea Mine to help you out!",
-            "See ya around."
-        },
-        FinishQuestID = "MeaninglessLove"
-    },
-    PearlsOfTheSea_Start = {
-        Messages = {
-            "Later on, when you start to advance in this lake, you will encounter different shops around the map.",
-            "These shops will require more and more resources to unlock, eventually requiring special materials to purchase.",
-            "In this case, one of them is called 'Pearls'. They are a special type of currency that are used to purchase different types of fish and equipments.",
-            "Pearls will be very important in the future to progress and become even more powerful!",
-            "30,000 Orange Algae from the Freshwater Reef",
-            "30,000 Pink Algae from the Freshwater Reef",
-            "30,000 Green Algae from the Freshwater Reef",
-            "75,000 Algae from the Runic Reef",
-            "Along with 300 Total Abilities Committed,",
-            "and last but not least,",
-            "You must pop a Sea Mine!",
-            "I'll see ya soon!"
-        },
-        QuestID = "PearlsOfTheSea"
-    },
-    PearlsOfTheSea_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    PearlsOfTheSea_Complete = {
-        Messages = {
-            "Nice work!!!",
-            "Heres a couple of pearls you can use to purchase different resources!",
-            "See you soon!"
-        },
-        FinishQuestID = "PearlsOfTheSea"
-    },
-
-
-    LightLikeSapphire_Start = {
-        Messages = {
-            "So, you remember how I said that you have 5 more quests until you get a sapphire egg?",
-            "Well, you're here now!!",
-            "But you don't get it easy of course, you gotta work for it lololol",
-            "Hmm let me think of a really big number from 0 - 250,000",
-            "Hmmmmmmmmmmmmmmmm...",
-            "Yeah so, how about collecting 250,000 algae from the Sun Reef!"
-        },
-        QuestID = "LightLikeSapphire"
-    },
-    LightLikeSapphire_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    LightLikeSapphire_Complete = {
-        Messages = {
-            "Wow, you actually did it, clearly you think this game is quite interesting huh",
-            "Well, enjoy your little treat of a sapphire egg. Oh yeah, even though it is an egg I dont suggest you use it on your aquarium",
-            "Otherwise, you'll miss out on crafting some pretty overpowered accessories."
-        },
-        FinishQuestID = "LightLikeSapphire"
-    },
-
-
-    AlgaeTrek_Start = {
-        Messages = {
-            "Welcome back... Don't know how many times I've said that!",
-            "Well, you're quite a natural I see, you've been able to keep up with my demands!",
-            "And you've earned your little sapphire egg!",
-            "Well, lets see, I'm going to assume you have AT LEAST 10 fish in your aquarium,",
-            "Otherwise I feel pretty bad for what I want from you",
-            "I want you to collect 75,000 Algae from:",
-            "Freshwater, Coral, Trash, Sun, Runic, Coralline, Obsidian, and Crystal Reef!",
-            "Good luck!"
-        },
-        QuestID = "AlgaeTrek"
-    },
-    AlgaeTrek_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    AlgaeTrek_Complete = {
-        Messages = {
-            "How was the trek?",
-            "You're lucky I didn't give you any tedious tasks... I suppose",
-            "Come back when you're ready for the next one."
-        },
-        FinishQuestID = "AlgaeTrek"
     },
     OutOfTheOrdinary_Start = {
         Messages = {
@@ -427,220 +65,8 @@ QuestConfig.Dialogue = {
             "Come back when you're ready for the next one."
         },
         FinishQuestID = "OutOfTheOrdinary"
-    },
-	CloudedInMystery_Start = {
-        Messages = {
-            "You know, there’s a reef that people aren’t even sure how it came to existence?",
-            "Located above the runic reefs, and close to the peak of the waterfalls, there lies a reef, known as the Mystic Reef.",
-            "The reef is very special, as it contains a new algae type.",
-            "Among the three “generic” types of algae, there is an algae type that remains to be the most powerful and resourceful.",
-            "People call it the mystic algae, it is white in appearance and appears quite rarely. Only reefs above the 15 fish barrier have mystic algae.",
-            "What makes mystic algae so special is that all the algae buffs for every type of algae affect mystic algae!",
-            "Let's just say that you have a 50% orange algae boost, it should only affect orange algae",
-            "But for the mystic algae, it gets affected by the 50% orange algae! So if you collect 100 algae of the orange algae, you will get 150 algae from the orange algae, and for the mystic algae you will also get 150 from the 100 algae collected!",
-            "As a result, the algae is quite rare to find in abundance. Even the mystic reef, which contains mainly mystic algae, only has the mystic algae as singles, and rarely doubles!",
-            "Anyway, just go and collect some mystic algae, there are some remnants of mystic algae located in the 15 fish required zone!"
-        },
-        QuestID = "CloudedInMystery"
-    },
-    CloudedInMystery_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    CloudedInMystery_Complete = {
-        Messages = {
-            "Nice job with the collection! I hope it wasn’t too difficult for you to obtain 15 fish,",
-            "Eventually there will be ways to obtain mystic algae more effectively, but as of now it won’t be much of a priority.",
-            "Come back to me when you are ready for the next quest!"
-        },
-        FinishQuestID = "CloudedInMystery"
-    },
-    SecondToNone_Start = {
-        Messages = {
-            "You’re just 8 quests away! How magnificent is that!",
-            "I hope the rewards I’m able to grant you are actually beneficial to your journey haha",
-            "You know if you’re tired of my stupid requests you can always talk to other quest givers, theres noobie turtle who gives infinite quests and then there is Lava Turtle, who gives you this pretty cool rune at the end of his questline, allowing you to get this type of harvesting tool.",
-        },
-        QuestID = "SecondToNone"
-    },
-    SecondToNone_InProgress = {
-        Messages = {
-            "get back to work"
-        }
-    },
-    SecondToNone_Complete = {
-        Messages = {
-            "Did you get those sea mines? Good. They were meant for 'explosive' science experiments!",
-            "Take these rewards. We're just getting into the heavy stuff now."
-        },
-        FinishQuestID = "SecondToNone"
-    },
-    AlgaeTrek2_Start = {
-        Messages = {
-            "Oh boy... Have you ever looked at a map and thought, 'I want to be everywhere'?",
-            "Well, now you'll be everywhere.",
-			"I need you to collect 300,000 algae from literally EVERY reef!",
-			"Cry about it lol"
-        },
-        QuestID = "AlgaeTrek2"
-    },
-    AlgaeTrek2_InProgress = {
-        Messages = {
-            "I wasn't joking. Every reef. Go!"
-        }
-    },
-    AlgaeTrek2_Complete = {
-        Messages = {
-            "Nice job yo!",
-            "Truly remarkable."
-        },
-        FinishQuestID = "AlgaeTrek2"
-    },
-    CoralQuadependence_Start = {
-        Messages = {
-			"I remember giving you a quest like this in the past,",
-			"It was something like 'Coral Codependence'",
-			"Guess what?",
-			"Second times the charm!",
-			"Go Collect"
-        },
-        QuestID = "CoralQuadependence"
-    },
-    CoralQuadependence_InProgress = {
-        Messages = {
-            "Pink algae. 450,000. Coral and Coralline. Not hard to remember, right?"
-        }
-    },
-    CoralQuadependence_Complete = {
-        Messages = {
-            "Ah, the pink hue reminds me of my grandmother's favorite shawl.",
-            "Beautiful work."
-        },
-        FinishQuestID = "CoralQuadependence"
-    },
-    TherellBeBetterDays_Start = {
-        Messages = {
-            "I had a terrifying dream that the Sun Reef, Ghastly Reef, and Warrior's Reef were completely overtaken by an endless horde of algae!",
-            "We must prevent this nightmare from coming true.",
-            "Collect 400,000 algae from each of those reefs.",
-            "Also, pop 5 sea mines to ensure the coast is clear!"
-        },
-        QuestID = "TherellBeBetterDays"
-    },
-    TherellBeBetterDays_InProgress = {
-        Messages = {
-            "The nightmare lurks! Hurry up and clear those reefs before the algae consumes us all!"
-        }
-    },
-    TherellBeBetterDays_Complete = {
-        Messages = {
-            "Phew, I can finally sleep peacefully knowing the apocalypse is canceled.",
-            "Excellent performance, kid."
-        },
-        FinishQuestID = "TherellBeBetterDays"
-    },
-    ZooplanktonHarmony_Start = {
-        Messages = {
-            "Ah, Zooplankton. Such small, majestic creatures.",
-            "We need true harmony between the oldest waters and the freshest streams.",
-            "Bring me 500,000 algae from both the Ancient Reef and the Freshwater Reef."
-        },
-        QuestID = "ZooplanktonHarmony"
-    },
-    ZooplanktonHarmony_InProgress = {
-        Messages = {
-            "Harmony takes patience. Go collect that algae from the Ancient and Freshwater reefs."
-        }
-    },
-    ZooplanktonHarmony_Complete = {
-        Messages = {
-            "Ah, harmony is perfectly restored. You're starting to look like a true professional.",
-            "I have very high hopes for you."
-        },
-        FinishQuestID = "ZooplanktonHarmony"
-    },
-    NoobiesFinish_Start = {
-        Messages = {
-            "I see you've grown strong... perhaps even stronger than I ever was.",
-            "But a true master never forgets their roots!",
-            "Return to the Trash, Crystal, and Freshwater reefs for 600,000 algae each.",
-            "Oh, and you must own all the Noobie Shop equipment! Humility is key."
-        },
-        QuestID = "NoobiesFinish"
-    },
-    NoobiesFinish_InProgress = {
-        Messages = {
-            "Don't tell me you forgot to buy the Noobie Shop items..."
-        }
-    },
-    NoobiesFinish_Complete = {
-        Messages = {
-            "Haha! Sometimes revisiting our humble beginnings reminds us of just how far we've climbed.",
-            "You're almost at the finish line."
-        },
-        FinishQuestID = "NoobiesFinish"
-    },
-    MagmaticSanctuary_Start = {
-        Messages = {
-            "This is your final task for me, my young scholar.",
-            "The core of the earth is blazing, and the sun shines upon our oldest reefs.",
-            "Collect 500,000 algae from Obsidian and Warrior's...",
-            "...and 250,000 orange algae from the Sun, Coral, and Ancient Reefs!",
-            "Let the fire fuel your spirit, and bring back the ultimate catch!"
-        },
-        QuestID = "MagmaticSanctuary"
-    },
-    MagmaticSanctuary_InProgress = {
-        Messages = {
-            "This is your final test! Let the magma fuel your spirit and collect that algae!"
-        }
-    },
-    MagmaticSanctuary_Complete = {
-        Messages = {
-            "My friend... you've done it.",
-            "You have conquered all of the Elder Turtle's trials.",
-            "Carry your title proudly, for you are truly a master of the hatchery!",
-            "But the lake is large... perhaps Lava Turtle has something to say."
-        },
-        FinishQuestID = "MagmaticSanctuary"
-    },
-
-    NoMoreQuests = {
-        Messages = {
-            "You finished all the quests, congratulations!"
-        }
-    },
-
-
-   
-    -- LAVA TURTLE DIALOGUES
-    Lava_Ignition_Start = {
-        Messages = {
-            "Greetings, traveler. I am the Lava Turtle.",
-            "Do you feel the heat beneath this world? The energy surging through the magma?",
-            "Only the strongest hatchlings survive the boiling currents.",
-            "Prove your mettle. Harvest the molten lands of the Obsidian Reef.",
-            "I require 7,500 Algae from the Obsidian Reef, and 50 abilities committed.",
-            "Return to me when you are ablaze with success."
-        },
-        QuestID = "Lava_Ignition"
-    },
-    Lava_Ignition_InProgress = {
-        Messages = {"Do not return until the task is done, the flames demand more."}
-    },
-    Lava_Ignition_Complete = {
-        Messages = {"Impressive start. But this is merely a spark..."},
-        FinishQuestID = "Lava_Ignition"
-    },
-
-
+    }
 }
-
-
--- ============================================================
--- QUESTS
--- ============================================================
 
 
 QuestConfig.Quests = {
@@ -654,7 +80,37 @@ QuestConfig.Quests = {
             BiomassAmount = 250,
             Items = {"Basic Egg"}
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Hello there!",
+                    "Let me introduce myself first, I am the [bold color=255,215,0]Elder Turtle[/bold]!",
+                    "I see that you have a fishing net and a pouch on you,",
+                    "You're here to be own a [bold color=0,255,255]fish hatchery[/bold], right?",
+                    "Well, that's good news, because I used to be a pretty notorious fish hatcherer myself!",
+                    "If you are willing to follow my demands, I promise you that you will be one of the best in the world!",
+                    "First off, lets have you collect [emph gradient=50,205,50|0,255,0]200 Algae[/emph] in the [bold color=30,144,255]Freshwater Reef[/bold],",
+                    "If you are confused on where that is, it is located on the shorelines of the lake!",
+                    "Best of luck [emph gradient=255,105,180|255,192,203]new adventurer[/emph]!"
+                },
+                QuestID = "FreshwaterCleaning"
+            },
+            InProgress = {
+                Messages = {
+                    "Fish are [bold color=238,130,238]quite fascinating[/bold], and if you haven't noticed already, you have one in your inventory!",
+                    "To hatch it, simply [shake color=255,69,0]drag it[/shake] out of your inventory, and you will be able to hatch your first fish!"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Great job! You're already getting the [emph gradient=255,215,0|255,165,0]hang of this[/emph]!",
+                    "Here is a [bold color=200,200,200]basic egg[/bold], you are able to drag it out of your inventory to an empty slot in your aquarium!",
+                    "Come back when you've hatched your [bold color=255,69,0]first fish[/bold]!"
+                },
+                FinishQuestID = "FreshwaterCleaning"
+            }
+        }
     },
     ["AFavoriteColor"] = {
         Name = "A Favorite Color",
@@ -667,7 +123,39 @@ QuestConfig.Quests = {
             BiomassAmount = 500,
             Items = {"Zooplankton"}
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Welcome back!",
+                    "If you haven't noticed already, there are different reefs around the map!",
+                    "Each one of them has their special trait",
+                    "For example, the Sun Reef, the one on that little uprise in the lake,",
+                    "mainly contains orange algae! And although it is much smaller than the Freshwater Reef,",
+                    "It regrows its algae MUCH faster!",
+                    "Now, I want you to collect 250 orange algae from ANY reef!",
+                    "Come back when you're done!"
+                },
+                QuestID = "AFavoriteColor"
+            },
+            InProgress = {
+                Messages = {
+                    "Have I told you I love the color orange?",
+                    "Most of what I like to eat is orange, for example, honey!",
+                    "Maybe the other turtles would think the same, I know Lava Turtle probably would.",
+                    "Oh, you don't know who Lava Turtle is?",
+                    "Well, story goes that he was once very famous for slacklining on top of a volcano!",
+                    "However, tragedy occured, but instead of meeting his demise, he turned into an [emph gradient=255,69,0|255,165,0]amalgamation of molten rock[/emph]!"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Thanks for helping me out!",
+                    "Come back for more quests!"
+                },
+                FinishQuestID = "AFavoriteColor"
+            }
+        }
     },
     ["BabySteps"] = {
         Name = "Baby Steps",
@@ -681,77 +169,252 @@ QuestConfig.Quests = {
             BiomassAmount = 1000,
             Items = { ["Zooplankton"] = 1 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Hello!",
+                    "I forgot to tell you what I gave you previously!",
+                    "These are called Zooplankton, they change your fish to a different one.",
+                    "Zooplankton are able to change your fish into majority of fish in the index!",
+                    "Some fish are rarer than others, and are listed in different types of rarities.",
+                    "They include: Rare fish, Epic fish, Legendary fish, and Mythic fish",
+                    "With mythic fish being the rarest in the game!",
+                    "Maybe you'll be lucky with your zooplankton and you'll get a really good fish!",
+                    "They'll be handy for what I want you to do anyway",
+                    "Now, collect 250 Green, Orange, and Pink algae from anywhere around the map!",
+                },
+                QuestID = "BabySteps"
+            },
+            InProgress = {
+                Messages = {
+                    "There are also eggs that you can purchase for pearls! Which I'll introduce later.",
+                    "Eggs let you hatch rarer fish, but they can also be used to purchase good equipment!"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Nice job!",
+                    "I hope that zooplankton gave you something good!",
+                    "Here is another Zooplankton to use in your collection!"
+                },
+                FinishQuestID = "BabySteps"
+            }
+        }
     },
     ["CoralCodependence"] = {
         Name = "Coral Codependence",
         Type = "Collect",
         Goals = {
-            ["Freshwater Reef_GreenAlgae"] = 100,
-            ["Freshwater Reef_PinkAlgae"] = 100,
-            ["Freshwater Reef_OrangeAlgae"] = 100,
-            ["Coral Reef_GreenAlgae"] = 100,
-            ["Coral Reef_PinkAlgae"] = 100,
-            ["Coral Reef_OrangeAlgae"] = 100
+            ["Freshwater Reef_GreenAlgae"] = 250,
+            ["Freshwater Reef_PinkAlgae"] = 250,
+            ["Freshwater Reef_OrangeAlgae"] = 250,
+            ["Coral Reef_GreenAlgae"] = 250,
+            ["Coral Reef_PinkAlgae"] = 250,
+            ["Coral Reef_OrangeAlgae"] = 250
         },
         Rewards = {
             BiomassAmount = 3000,
             Items = { ["Zooplankton"] = 2, ["Basic Egg"] = 1, ["Sea Mine"] = 1 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Remember I told you that there were many different reefs around the map?",
+                    "Well it turns out I need all three colors again!",
+                    "Except, I need you to do it in both freshwater and coral reef.",
+                    "That's all! Come back when you're done!"
+                },
+                QuestID = "CoralCodependence"
+            },
+            InProgress = {
+                Messages = {
+                    "If you haven't already, you may want to go get better equippment."
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Nice job! You're quite a natural at this!",
+                    "Talk to me when you're ready!"
+                },
+                FinishQuestID = "CoralCodependence"
+            }
+        }
     },
     ["Trigonometry"] = {
         Name = "Trigonometry",
         Type = "Collect",
         TargetResource = "Any",
         TargetLocation = "Trash Reef",
-        GoalAmount = 4000,
+        GoalAmount = 2500,
         Rewards = {
-            BiomassAmount = 5000,
+            BiomassAmount = 4000,
             Items = { ["Zooplankton"] = 2, ["Basic Egg"] = 1 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Did I ever tell you how bad I am at math?",
+                    "I thought math was supposed to be about putting cookies in a jar",
+                    "Not whatever this 'Sine' or 'Tangent' stuff is, it drives me CRAZY!!!",
+                    "Thank goodness I'm not in that suffocating classroom anymore. I barely passed with a C-",
+                    "That was a long, long, looong time ago, I don't have to deal with my teacher's yapping anymore.",
+                    "Well, actually, the only thing I DO remember, is that all angles inside of a triangle are equivalent to 180 degrees!",
+                    "I can't believe thats the ONLY thing I remember from that class.",
+                    "Oops, I'm off topic! Sorry about that",
+                    "Collect me 2,500 Algae from the Trash Reef!"
+                },
+                QuestID = "Trigonometry"
+            },
+            InProgress = {
+                Messages = {
+                    "snore zzzzzzz"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "How's it been?",
+                    "I sure hope you're ready for whatever math test you have later on.",
+                    "Anyways,",
+                    "In a Euclidean space, the sum of angles of a triangle equals a straight angle (180 degrees, π radians, two right angles, or a half-turn). A triangle has three angles, and has one at each vertex, bounded by a pair of adjacent sides.The sum can be computed directly using the definition of angle based on the dot product and trigonometric identities, or more quickly by reducing to the two-dimensional case and using Euler's identity.It was unknown for a long time whether other geometries exist, for which this sum is different. The influence of this problem on mathematics was particularly strong during the 19th century. Ultimately, the answer was proven to be positive: in other spaces (geometries) this sum can be greater or lesser, but it then must depend on the triangle. Its difference from 180° is a case of angular defect and serves as an important distinction for geometric systems. (Wikipedia Contributors. \"Sum of Angles of a Triangle.\" Wikipedia, Wikimedia Foundation, 10 Feb. 2025.)",
+                    "I'm going back to sleep."
+                },
+                FinishQuestID = "Trigonometry"
+            }
+        }
     },
     ["HistoryRepeatsItself"] = {
         Name = "History Repeats Itself",
         Type = "Collect",
         Goals = {
-            ["Trash Reef"] = 4000,
-            ["Sun Reef"] = 4000,
+            ["Trash Reef"] = 3000,
+            ["Sun Reef"] = 3000,
             ["FishRequired"] = 5
         },
         Rewards = {
             BiomassAmount = 10000,
             Items = { ["Zooplankton"] = 3, ["Bronze Egg"] = 1 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Welcome back!",
+                    "It's quite rare that I see people here at all. I don't think I've ever told you that.",
+                    "I take it for granted sometimes, it's never my intention to be so pushy and demanding. I'm just excited, that's all.",
+                    "...",
+                    "Sometimes, I question what life is.",
+                    "What is the point of living if you die anyways?",
+                    "Is it really certain you live once only? And after you die, what happens?",
+                    "Was there ever a before, did I live before?",
+                    "When you die, does your consciousness continue sometime far, far in the future, where maybe,",
+                    "Your brain structure and consciousness is fully recreated in some kind of manner?",
+                    "Imagine how long that'd take, you'd probably be witnessing MULTIPLE universal resets before it ever happens again.",
+                    "This makes me realize how lucky I am to be alive. Don't waste your time and effort to contemplate whether or not there is anything after life.",
+                    "You'll be stuck in a cycle, and you'll never be able to live fully.",
+                    "Anyways, back to reality, I need you to collect 3,500 algae from both the Trash Reef and the Sun Reef."
+                },
+                QuestID = "HistoryRepeatsItself"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Life is something you need to appreciate once in a while",
+                    "I don't mean to ruin your mood, but your life will end.",
+                    "It doesn't matter how much you try to resist, how much you do to stop it, you will die.",
+                    "And yes, people will just tell you to 'live your life' and blah blah blah..",
+                    "But it's so much harder to say that when you're already raised within boundaries stated to you from birth.",
+                    "Living is to understand that death is inevitable. When you understand that, you'll learn to cherish what you do.",
+                    "Anyways, sorry for the existential dialogue, I just wanted to add on that you have 5 more quests until you earn a sapphire egg!",
+                    "Come back again!"
+                },
+                FinishQuestID = "HistoryRepeatsItself"
+            }
+        }
     },
     ["RunicRebel"] = {
         Name = "Runic Rebel",
         Type = "Collect",
         TargetResource = "Any",
         TargetLocation = "Runic Reef",
-        GoalAmount = 15000,
+        GoalAmount = 12500,
         Rewards = {
             BiomassAmount = 20000,
             Items = { ["Zooplankton"] = 5, ["Bronze Egg"] = 1 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "When walking around the map, you've definitely seen those gates that have a number",
+                    "That means that you need THAT amount of fish to enter that zone",
+                    "Unfortunately, that means you'll need 5 fish to do the next quest, so I hope you really got those fish!",
+                    "I want you to go to the Runic Reef, the reef that isn't a rectangle, or square, wait what is it?",
+                    "Just go collect 9,000 algae from that reef, maybe that reef can help explain why I saw that weird algae type a bit ago.."
+                },
+                QuestID = "RunicRebel"
+            },
+            InProgress = {
+                Messages = {
+                    "Fish are put into 4 different archetypes, Orange, Pink, Green, and Colorless.",
+                    "Each corresponding color collects 100% more algae of that type per harvest."
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Aye, thanks for helping me out man!",
+                    "I'll be able to examine this algae a bit more closely now!",
+                    "Well, see you later!"
+                },
+                FinishQuestID = "RunicRebel"
+            }
+        }
     },
     ["TakeFlight"] = {
         Name = "Take Flight",
         Type = "Collect",
         Goals = {
-            ["Freshwater Reef"] = 10000,
-            ["Coral Reef"] = 10000,
-            ["Trash Reef"] = 10000,
-            ["Sun Reef"] = 10000
+            ["Freshwater Reef"] = 8000,
+            ["Coral Reef"] = 8000,
+            ["Trash Reef"] = 8000,
+            ["Sun Reef"] = 8000
         },
         Rewards = {
             BiomassAmount = 25000,
             Items = { ["Zooplankton"] = 5}
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "You tired of walking huh? I could've guessed given the fact that there's not much transport around the map.",
+                    "Too bad you're gonna have to keep walking",
+                    "Unless you purchase that Hydroglider in the Noob Shop!",
+                    "It's quite handy, you can control where you go based off where you're looking!",
+                    "Anyways, I'll give you the necessary resources to get it IF you collect 8,000 algae from every single field in the starting area, how's that sound?",
+                    "Good luck!"
+                },
+                QuestID = "TakeFlight"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Must've been one kind of a walk huh?",
+                    "Here's your reward!!! Good luck!!"
+                },
+                FinishQuestID = "TakeFlight"
+            }
+        }
     },
     ["MeaninglessLove"] = {
         Name = "Meaningless Love",
@@ -768,7 +431,42 @@ QuestConfig.Quests = {
             BiomassAmount = 40000,
             Items = { ["Fish Feed"] = 25, ["Sea Mine"] = 1 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "I remember back in my teenage years I had bright aspirations of being an athlete, specifically a track runner.",
+                    "It's the kind of aspiration where it turned into obsession.",
+                    "Hold on there's a name for this...",
+                    "Passion? I don't know, probably something like that.",
+                    "Each and every day I'd hop the fence of my local school's track and practice everything.",
+                    "Even on days I'm injured, or days where I don't feel in perfect shape,",
+                    "I'd always find myself almost attracted to the track.",
+                    "Every stride, every step, it always pushed me further beyond what I believed I could do.",
+                    "Dreams I have of being the fastest in the school, fastest in the state, fastest in the nation.",
+                    "It felt like my life had MEANING for once.",
+                    "Meaning that I've always yearned for.",
+                    "...",
+                    "What's that?",
+                    "Oh yeah, you need a quest from me.",
+                    "Sorry about that, uhhh just go collect 15,000 algae from these reefs, and have 250 abilities committed total."
+                },
+                QuestID = "MeaninglessLove"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Congrats!! Mr. Crazyyism is too lazy to give me much dialogue to say here...",
+                    "Well, here's some fish feed and a Sea Mine to help you out!",
+                    "See ya around."
+                },
+                FinishQuestID = "MeaninglessLove"
+            }
+        }
     },
     ["PearlsOfTheSea"] = {
         Name = "Pearls of the Sea",
@@ -785,7 +483,39 @@ QuestConfig.Quests = {
             BiomassAmount = 50000,
             Items = { ["Pearl"] = 20, ["Sea Mine"] = 5 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Later on, when you start to advance in this lake, you will encounter different shops around the map.",
+                    "These shops will require more and more resources to unlock, eventually requiring special materials to purchase.",
+                    "In this case, one of them is called 'Pearls'. They are a special type of currency that are used to purchase different types of fish and equipments.",
+                    "Pearls will be very important in the future to progress and become even more powerful!",
+                    "30,000 Orange Algae from the Freshwater Reef",
+                    "30,000 Pink Algae from the Freshwater Reef",
+                    "30,000 Green Algae from the Freshwater Reef",
+                    "75,000 Algae from the Runic Reef",
+                    "Along with 300 Total Abilities Committed,",
+                    "and last but not least,",
+                    "You must pop a Sea Mine!",
+                    "I'll see ya soon!"
+                },
+                QuestID = "PearlsOfTheSea"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Nice work!!!",
+                    "Heres a couple of pearls you can use to purchase different resources!",
+                    "See you soon!"
+                },
+                FinishQuestID = "PearlsOfTheSea"
+            }
+        }
     },
     ["LightLikeSapphire"] = {
         Name = "Light Like Sapphire",
@@ -797,7 +527,33 @@ QuestConfig.Quests = {
             BiomassAmount = 500000,
             Items = { ["Sapphire Egg"] = 1, ["Pearl"] = 15, ["Zooplankton"] = 5 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "So, you remember how I said that you have 5 more quests until you get a sapphire egg?",
+                    "Well, you're here now!!",
+                    "But you don't get it easy of course, you gotta work for it lololol",
+                    "Hmm let me think of a really big number from 0 - 250,000",
+                    "Hmmmmmmmmmmmmmmmm...",
+                    "Yeah so, how about collecting 250,000 algae from the Sun Reef!"
+                },
+                QuestID = "LightLikeSapphire"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Wow, you actually did it, clearly you think this game is quite interesting huh",
+                    "Well, enjoy your little treat of a sapphire egg. Oh yeah, even though it is an egg I dont suggest you use it on your aquarium",
+                    "Otherwise, you'll miss out on crafting some pretty overpowered accessories."
+                },
+                FinishQuestID = "LightLikeSapphire"
+            }
+        }
     },
     ["AlgaeTrek"] = {
         Name = "Algae Trek",
@@ -816,22 +572,78 @@ QuestConfig.Quests = {
             BiomassAmount = 250000,
             Items = { ["Zooplankton"] = 20, ["Sea Mine"] = 3, ["Bronze Egg"] = 1, ["Fertilizer"] = 3 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Welcome back... Don't know how many times I've said that!",
+                    "Well, you're quite a natural I see, you've been able to keep up with my demands!",
+                    "And you've earned your little sapphire egg!",
+                    "Well, lets see, I'm going to assume you have AT LEAST 10 fish in your aquarium,",
+                    "Otherwise I feel pretty bad for what I want from you",
+                    "I want you to collect 75,000 Algae from:",
+                    "Freshwater, Coral, Trash, Sun, Runic, Coralline, Obsidian, and Crystal Reef!",
+                    "Good luck!"
+                },
+                QuestID = "AlgaeTrek"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "How was the trek?",
+                    "You're lucky I didn't give you any tedious tasks... I suppose",
+                    "Come back when you're ready for the next one."
+                },
+                FinishQuestID = "AlgaeTrek"
+            }
+        }
     },
     ["CloudedInMystery"] = {
         Name = "CloudedInMystery",
         Type = "Collect",
         Goals = {
             ["MysticAlgae"] = 225000,
-            ["Warrior’s Reef"] = 160000,
-
-
+            ["Warrior's Reef"] = 160000
         },
         Rewards = {
             BiomassAmount = 250000,
             Items = { ["Zooplankton"] = 30, ["Sea Mine"] = 1, ["Pearl"] = 12 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "You, know, there’s a reef that people aren’t even sure how it came to existence?",
+                    "Located above the runic reefs, and close to the peak of the waterfalls, there lies a reef, known as the Mystic Reef.",
+                    "The reef is very special, as it contains a new algae type.",
+                    "Among the three “generic” types of algae, there is an algae type that remains to be the most powerful and resourceful.",
+                    "People call it the mystic algae, it is white in appearance and appears quite rarely. Only reefs above the 15 fish barrier have mystic algae.",
+                    "What makes mystic algae so special is that all the algae buffs for every type of algae affect mystic algae!",
+                    "Let's just say that you have a 50% orange algae boost, it should only affect orange algae",
+                    "But for the mystic algae, it gets affected by the 50% orange algae! So if you collect 100 algae of the orange algae, you will get 150 algae from the orange algae, and for the mystic algae you will also get 150 from the 100 algae collected!",
+                    "As a result, the algae is quite rare to find in abundance. Even the mystic reef, which contains mainly mystic algae, only has the mystic algae as singles, and rarely doubles!",
+                    "Anyway, just go and collect some mystic algae, there are some remnants of mystic algae located in the 15 fish required zone!"
+                },
+                QuestID = "CloudedInMystery"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Nice job with the collection! I hope it wasn’t too difficult for you to obtain 15 fish,",
+                    "Eventually there will be ways to obtain mystic algae more effectively, but as of now it won’t be much of a priority.",
+                    "Come back to me when you are ready for the next quest!"
+                },
+                FinishQuestID = "CloudedInMystery"
+            }
+        }
     },
     ["SecondToNone"] = {
         Name = "SecondToNone",
@@ -841,15 +653,35 @@ QuestConfig.Quests = {
             ["AbilitiesCommitted"] = 2000,
             ["Ghastly Reef"] = 125000,
             ["Freshwater Reef"] = 275000,
-            ["Mystic Reef"] = 100000,
-
-
+            ["Heavensent Reef"] = 100000
         },
         Rewards = {
             BiomassAmount = 670041,
-            Items = { ["Sapphire Egg"] = 1, ["Sea Mine"] = 2, ["Pearl"] = 22, ["Fish Feed"] = 677,  }
+            Items = { ["Sapphire Egg"] = 1, ["Sea Mine"] = 2, ["Pearl"] = 22, ["Fish Feed"] = 677 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "You’re just 8 quests away! How magnificent is that!",
+                    "I hope the rewards I’m able to grant you are actually beneficial to your journey haha",
+                    "You know if you’re tired of my stupid requests you can always talk to other quest givers, theres noobie turtle who gives infinite quests and then there is Lava Turtle, who gives you this pretty cool rune at the end of his questline, allowing you to get this type of harvesting tool."
+                },
+                QuestID = "SecondToNone"
+            },
+            InProgress = {
+                Messages = {
+                    "get back to work"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Did you get those sea mines? Good. They were meant for 'explosive' science experiments!",
+                    "Take these rewards. We're just getting into the heavy stuff now."
+                },
+                FinishQuestID = "SecondToNone"
+            }
+        }
     },
     ["AlgaeTrek2"] = {
         Name = "Algae Trek 2",
@@ -863,35 +695,87 @@ QuestConfig.Quests = {
             ["Obsidian Reef"] = 300000,
             ["Crystal Reef"] = 300000,
             ["Coralline Reef"] = 300000,
-            ["Warrior’s Reef"] = 300000,
+            ["Warrior's Reef"] = 300000,
             ["Ghastly Reef"] = 300000,
-            ["Mystic Reef"] = 300000
+            ["Heavensent Reef"] = 300000
         },
         Rewards = {
             BiomassAmount = 800000,
             Items = { ["Zooplankton"] = 40, ["Sea Mine"] = 5, ["Pearl"] = 25 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Oh boy... Have you ever looked at a map and thought, 'I want to be everywhere'?",
+                    "Well, now you'll be [emph gradient=0,255,0|0,255,255]everywhere[/emph].",
+                    "I'm so funny right? Because now you have to [emph color=255,50,50]work your butt off[/emph] for this stupid quest!",
+                    "Ah,",
+                    "The sun glares so [bold color=255,215,0]bright[/bold] but I'm kind of annoyed because that [shake color=100,200,100]really big tree[/shake] keeps blocking it's glare.",
+                    "But I guess that's what [emph gradient=255,255,0|255,100,0]emphasizes[/emph] its rays, it shows that the sun can truly shine bright even when things are in its way.",
+                    "...",
+                    "Oh, I'm a bit off track, sorry haha",
+                    "Just, do this quest for me, yknow?"
+                },
+                QuestID = "AlgaeTrek2"
+            },
+            InProgress = {
+                Messages = {
+                    "I wasn't joking. Every reef. Go!"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "When the [bold color=150,200,255]moon[/bold] shines in the night sky,",
+                    "I guess it resembles something close to the sun's rays.",
+                    "I look into the moonlight and I just really wonder to myself if...",
+                    "Maybe she's looking into the [emph gradient=255,215,0|255,100,50]same sun[/emph] as I am."
+                },
+                FinishQuestID = "AlgaeTrek2"
+            }
+        }
     },
     ["CoralQuadependence"] = {
         Name = "Coral Quadependence",
         Type = "Collect",
         Goals = {
-			["Coral Reef_PinkAlgae"] = 450000,
-			["Coral Reef_GreenAlgae"] = 200000,
-			["Coralline Reef_PinkAlgae"] = 450000,
-			["Coralline Reef_OrangeAlgae"] = 300000,
-			["Coralline Reef"] = 1000000,
-			["Coral Reef"] = 500000,
-			["AbilitiesCommitted"] = 5000,
-			["FishRequired"] = 12
-            
+            ["Coral Reef_PinkAlgae"] = 450000,
+            ["Coral Reef_GreenAlgae"] = 200000,
+            ["Coralline Reef_PinkAlgae"] = 450000,
+            ["Coralline Reef"] = 1000000,
+            ["Coral Reef"] = 500000,
+            ["AbilitiesCommitted"] = 5000,
+            ["FishRequired"] = 12
         },
         Rewards = {
             BiomassAmount = 900000,
             Items = { ["Zooplankton"] = 65, ["Sea Mine"] = 3, ["Pearl"] = 30, ["Bronze Egg"] = 5 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "I remember giving you a quest like this in the past,",
+                    "It was something like 'Coral Codependence'",
+                    "Guess what?",
+                    "Second times the charm!",
+                    "Go Collect"
+                },
+                QuestID = "CoralQuadependence"
+            },
+            InProgress = {
+                Messages = {
+                    "Pink algae. 450,000. Coral and Coralline. Not hard to remember, right?"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Ah, the pink hue reminds me of my grandmother's favorite shawl.",
+                    "Beautiful work."
+                },
+                FinishQuestID = "CoralQuadependence"
+            }
+        }
     },
     ["TherellBeBetterDays"] = {
         Name = "There'll Be Better Days",
@@ -899,14 +783,37 @@ QuestConfig.Quests = {
         Goals = {
             ["Sun Reef"] = 750000,
             ["Ghastly Reef"] = 900000,
-            ["Warrior’s Reef"] = 1000000,
+            ["Warrior's Reef"] = 1000000,
             ["SeaMinesPopped"] = 5
         },
         Rewards = {
             BiomassAmount = 1000000,
             Items = { ["Sapphire Egg"] = 2, ["Zooplankton"] = 60, ["Pearl"] = 40 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "I had a terrifying dream that the Sun Reef, Ghastly Reef, and Warrior's Reef were completely overtaken by an endless horde of algae!",
+                    "We must prevent this nightmare from coming true.",
+                    "Collect 400,000 algae from each of those reefs.",
+                    "Also, pop 5 sea mines to ensure the coast is clear!"
+                },
+                QuestID = "TherellBeBetterDays"
+            },
+            InProgress = {
+                Messages = {
+                    "The nightmare lurks! Hurry up and clear those reefs before the algae consumes us all!"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Phew, I can finally sleep peacefully knowing the apocalypse is canceled.",
+                    "Excellent performance, kid."
+                },
+                FinishQuestID = "TherellBeBetterDays"
+            }
+        }
     },
     ["ZooplanktonHarmony"] = {
         Name = "Zooplankton Harmony",
@@ -919,30 +826,37 @@ QuestConfig.Quests = {
             BiomassAmount = 1250000,
             Items = { ["Zooplankton"] = 100, ["Sea Mine"] = 10, ["Pearl"] = 50 }
         },
-        Giver = "Elder Turtle"
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Ah, Zooplankton. Such small, majestic creatures.",
+                    "We need true harmony between the oldest waters and the freshest streams.",
+                    "Bring me 500,000 algae from both the Ancient Reef and the Freshwater Reef."
+                },
+                QuestID = "ZooplanktonHarmony"
+            },
+            InProgress = {
+                Messages = {
+                    "Harmony takes patience. Go collect that algae from the Ancient and Freshwater reefs."
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Ah, harmony is perfectly restored. You're starting to look like a true professional.",
+                    "I have very high hopes for you."
+                },
+                FinishQuestID = "ZooplanktonHarmony"
+            }
+        }
     },
-    ["NoobiesFinish"] = {
-        Name = "Noobie's Finish",
-        Type = "Collect",
-        Goals = {
-            ["Trash Reef"] = 600000,
-            ["Crystal Reef"] = 600000,
-            ["Freshwater Reef"] = 600000,
-            ["Runic Reef_GreenAlgae"] = 200000,
-            ["OwnAllNoobieEquipment"] = 1
-        },
-        Rewards = {
-            BiomassAmount = 1500000,
-            Items = { ["Sapphire Egg"] = 3, ["Zooplankton"] = 80, ["Pearl"] = 60 }
-        },
-        Giver = "Elder Turtle"
-    },
+
     ["MagmaticSanctuary"] = {
         Name = "Magmatic Sancturary",
         Type = "Collect",
         Goals = {
             ["Obsidian Reef"] = 500000,
-            ["Warrior’s Reef"] = 500000,
+            ["Warrior's Reef"] = 500000,
             ["Sun Reef_OrangeAlgae"] = 250000,
             ["Coral Reef_OrangeAlgae"] = 250000,
             ["Ancient Reef_OrangeAlgae"] = 250000
@@ -951,16 +865,73 @@ QuestConfig.Quests = {
             BiomassAmount = 2000000,
             Items = { ["Ruby Egg"] = 1, ["Zooplankton"] = 120, ["Pearl"] = 75, ["Fish Feed"] = 1000 }
         },
+        Giver = "Elder Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "This is your final task for me, my young scholar.",
+                    "The core of the earth is blazing, and the sun shines upon our oldest reefs.",
+                    "Collect 500,000 algae from Obsidian and Warrior's...",
+                    "...and 250,000 orange algae from the Sun, Coral, and Ancient Reefs!",
+                    "Let the fire fuel your spirit, and bring back the ultimate catch!"
+                },
+                QuestID = "MagmaticSanctuary"
+            },
+            InProgress = {
+                Messages = {
+                    "This is your final test! Let the magma fuel your spirit and collect that algae!"
+                }
+            },
+            Complete = {
+                Messages = {
+                    "My friend... you've done it.",
+                    "You have conquered all of the Elder Turtle's trials.",
+                    "Carry your title proudly, for you are truly a master of the hatchery!",
+                    "But the lake is large... perhaps Lava Turtle has something to say."
+                },
+                FinishQuestID = "MagmaticSanctuary"
+            }
+        }
+    },
+    ["TheGrandHarvest"] = {
+        Name = "The Grand Harvest",
+        Type = "Collect",
+        Goals = {
+            ["Harvests"] = 5000,
+            ["TokensCollected"] = 50
+        },
+        Rewards = {
+            BiomassAmount = 2500000,
+            Items = { ["Zooplankton"] = 150 }
+        },
         Giver = "Elder Turtle"
     },
-
-
-    -------------------------------------------------------------------------------------
-    ------------------------------------------------------------------------------------
-    ------------------------------------------------------------------------------------
-    ------------------------------------------------------------------------------------
-
-
+    ["CriticalMomentum"] = {
+        Name = "Critical Momentum",
+        Type = "Collect",
+        Goals = {
+            ["Harvests"] = 1000,
+            ["Criticals"] = 1500
+        },
+        Rewards = {
+            BiomassAmount = 3000000,
+            Items = { ["Pearl"] = 100, ["Sea Mine"] = 15 }
+        },
+        Giver = "Elder Turtle"
+    },
+    ["MegaPower"] = {
+        Name = "Mega Power",
+        Type = "Collect",
+        Goals = {
+            ["MegaCriticals"] = 250,
+            ["TokensCollected_Pearl"] = 25
+        },
+        Rewards = {
+            BiomassAmount = 5000000,
+            Items = { ["Ruby Egg"] = 2, ["Sapphire Egg"] = 5 }
+        },
+        Giver = "Elder Turtle"
+    },
     ["Lava_Ignition"] = {
         Name = "Ignition",
         Type = "Collect",
@@ -971,9 +942,53 @@ QuestConfig.Quests = {
         Rewards = {
             BiomassAmount = 5000
         },
-        Giver = "Lava Turtle"
-    },
+        Giver = "Lava Turtle",
+        Dialogue = {
+            Start = {
+                Messages = {
+                    "Greetings, traveler. I am the Lava Turtle.",
+                    "Do you feel the heat beneath this world? The energy surging through the magma?",
+                    "Only the strongest hatchlings survive the boiling currents.",
+                    "Prove your mettle. Harvest the molten lands of the Obsidian Reef.",
+                    "I require 7,500 Algae from the Obsidian Reef, and 50 abilities committed.",
+                    "Return to me when you are ablaze with success."
+                },
+                QuestID = "Lava_Ignition"
+            },
+            InProgress = {
+                Messages = {
+                    "Do not return until the task is done, the flames demand more."
+                }
+            },
+            Complete = {
+                Messages = {
+                    "Impressive start. But this is merely a spark..."
+                },
+                FinishQuestID = "Lava_Ignition"
+            }
+        }
+    }
 }
+
+
+for qId, qCfg in pairs(QuestConfig.Quests) do
+    if qCfg.Dialogue then
+        if qCfg.Dialogue.Start then
+            qCfg.Dialogue.Start.QuestID = qCfg.Dialogue.Start.QuestID or qId
+            QuestConfig.Dialogue[qId .. "_Start"] = qCfg.Dialogue.Start
+            if qId == "FreshwaterCleaning" then
+                QuestConfig.Dialogue["WelcomeDialogue"] = qCfg.Dialogue.Start
+            end
+        end
+        if qCfg.Dialogue.InProgress then
+            QuestConfig.Dialogue[qId .. "_InProgress"] = qCfg.Dialogue.InProgress
+        end
+        if qCfg.Dialogue.Complete then
+            qCfg.Dialogue.Complete.FinishQuestID = qCfg.Dialogue.Complete.FinishQuestID or qId
+            QuestConfig.Dialogue[qId .. "_Complete"] = qCfg.Dialogue.Complete
+        end
+    end
+end
 
 
 function QuestConfig.UpdateNoobieTurtle(completedQuests, fishCount, userId, existingProgress)
@@ -1127,7 +1142,7 @@ function QuestConfig.UpdateNoobieTurtle(completedQuests, fishCount, userId, exis
     }
     QuestConfig.Dialogue["NoobieTurtle_InProgress"] = {
         Messages = {
-            "You’ve completed %d of my quests so far!, but currently you have a quest from me!"
+            string.format("You’ve completed %d of my quests so far!, but currently you have a quest from me!", completedQuests)
         }
     }
     QuestConfig.Dialogue["NoobieTurtle_Complete"] = {
@@ -1142,6 +1157,3 @@ end
 
 
 return QuestConfig
-
-
-

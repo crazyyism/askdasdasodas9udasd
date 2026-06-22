@@ -11,6 +11,7 @@ local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
 local MobService = require(script.Parent.MobService)
 
 local AbilityService = {}
+AbilityService.ExpectedRhythmHits = {}
 
 -- Track player ability buffs
 -- Structure: PlayerBuffs[player.UserId] = {AlgaeBoost = {Stacks = 5, ExpiresAt = os.time() + 30}}
@@ -200,7 +201,7 @@ function AbilityService.SpawnMitosisClone(player)
 		Id = targetFish.Id,
 		UniqueId = HttpService:GenerateGUID(false),
 		IsTemporary = true,
-		ExpiresAt = os.time() + 20,
+		ExpiresAt = os.time() + 30,
 		VisualOverride = {
 			Color = Color3.fromRGB(0, 255, 255), -- Neon Blue/Cyan
 			Transparency = 0.5,
@@ -613,20 +614,20 @@ function AbilityService.UpdatePlayerStats(player)
 		if buffs.PinkAlgaeBoost then
 			local b = buffs.PinkAlgaeBoost
 			local bCfg = FishConfig.Buffs.PinkAlgaeBoost
-			local mult = (bCfg and bCfg.Multiplier) or 0.5
+			local mult = b.CustomMultiplier or (bCfg and bCfg.Multiplier) or 0.5
 			data.Stats.PercentPinkAlgae = data.Stats.PercentPinkAlgae + (mult * b.Stacks)
 			data.Stats.InstantConversion = data.Stats.InstantConversion + (0.01 * b.Stacks)
 		end
 		if buffs.GreenAlgaeBoost then
 			local b = buffs.GreenAlgaeBoost
 			local bCfg = FishConfig.Buffs.GreenAlgaeBoost
-			local mult = (bCfg and bCfg.Multiplier) or 0.5
+			local mult = b.CustomMultiplier or (bCfg and bCfg.Multiplier) or 0.5
 			data.Stats.PercentGreenAlgae = data.Stats.PercentGreenAlgae + (mult * b.Stacks)
 		end
 		if buffs.OrangeAlgaeBoost then
 			local b = buffs.OrangeAlgaeBoost
 			local bCfg = FishConfig.Buffs.OrangeAlgaeBoost
-			local mult = (bCfg and bCfg.Multiplier) or 0.5
+			local mult = b.CustomMultiplier or (bCfg and bCfg.Multiplier) or 0.5
 			data.Stats.PercentOrangeAlgae = data.Stats.PercentOrangeAlgae + (mult * b.Stacks)
 		end
 
@@ -738,14 +739,14 @@ function AbilityService.UpdatePlayerStats(player)
 end
 
 -- Helper: Generic Buff Application
-function AbilityService.ApplyBuff(player, buffName)
+function AbilityService.ApplyBuff(player, buffName, customDuration, customMultiplier)
 	local buffConfig = FishConfig.Buffs[buffName]
 	if not buffConfig then return end
 
 	local userId = player.UserId
 	if not PlayerBuffs[userId] then PlayerBuffs[userId] = {} end
 
-	local duration = buffConfig.Duration or 10
+	local duration = customDuration or buffConfig.Duration or 10
 	local maxStacks = buffConfig.MaxStacks or 10
 
 	local current = PlayerBuffs[userId][buffName]
@@ -756,11 +757,11 @@ function AbilityService.ApplyBuff(player, buffName)
 			Stacks = 1,
 			ExpiresAt = os.time() + duration,
 			Max = maxStacks,
-			LastSent = 0
+			LastSent = 0,
+			CustomMultiplier = customMultiplier
 		}
 		stacksChanged = true
-	else
-		-- If ApplyBuff is just refreshing, check MaxStacks limit
+	else		-- If ApplyBuff is just refreshing, check MaxStacks limit
 		if current.Stacks < (current.Max or maxStacks) then
 			current.Stacks = current.Stacks + 1
 			stacksChanged = true
@@ -768,7 +769,9 @@ function AbilityService.ApplyBuff(player, buffName)
 				PlayerData.IncrementQuestGoal(player, "MaxStacksReached", 1)
 			end
 		end
+		-- Always refresh duration and potentially update custom multiplier
 		current.ExpiresAt = os.time() + duration
+		if customMultiplier then current.CustomMultiplier = customMultiplier end
 	end
 
 	local info = PlayerBuffs[userId][buffName]
@@ -1654,94 +1657,22 @@ AbilityHandlers["Bloodthirst"] = function(player, fishIndex, fishId, position, a
 				end
 				if os.clock() - lastPlayerHitTime > 1.0 and player.Character and player.Character.PrimaryPart then
 					if (player.Character.PrimaryPart.Position - currentPos).Magnitude < (radius + 2) then
-						lastPlayerHitTime = os.clock(); ApplyToolBoost(player, abilityConfig)
-					end
-				end
-			end
-		end)
+local AbilitiesFolder = script.Parent:WaitForChild("Abilities")
+for _, child in ipairs(AbilitiesFolder:GetChildren()) do
+	if child:IsA("ModuleScript") then
+		local setupFunc = require(child)
+		local context = {
+			AbilityService = AbilityService,
+			VFXReplication = VFXReplication,
+			RhythmGameEvent = RhythmGameEvent,
+			ActivePins = ActivePins,
+			PlayerData = PlayerData,
+			PlayerBuffs = PlayerBuffs,
+			BuildAlgaeOverlapParams = BuildAlgaeOverlapParams,
+			playerFishPositions = playerFishPositions
+		}
+		AbilityHandlers[child.Name] = setupFunc(context)
 	end
-end
-
-AbilityHandlers["Synesthesia"] = function(player, fishIndex, fishId, position, abilityConfig, multiplier, vfxOverride, extraData, data)
-	if not position then return end
-	local radius = abilityConfig.Radius or 10
-	local amount = (abilityConfig.Amount or 12) * multiplier
-	VFXReplication:FireAllClients("Synesthesia", player, fishIndex, {Position = position})
-	task.delay(2, function()
-		if not player or not player.Parent then return end
-		local HarvestService = require(script.Parent.HarvestService)
-		local overlapParams = BuildAlgaeOverlapParams()
-		local toHarvest = {}
-		for _, part in ipairs(workspace:GetPartBoundsInRadius(position, radius, overlapParams)) do
-			if part:IsA("BasePart") then table.insert(toHarvest, part) end
-		end
-		if #toHarvest > 0 then HarvestService.HarvestBatch(player, toHarvest, amount, true, true) end
-		local buffRange = abilityConfig.BuffRange or radius
-		if player.Character and player.Character.PrimaryPart then
-			if (player.Character.PrimaryPart.Position - position).Magnitude <= buffRange then
-				AbilityService.ApplyBuff(player, "Harmony")
-			end
-		end
-	end)
-end
-
-AbilityHandlers["Black Hole"] = function(player, fishIndex, fishId, position, abilityConfig, multiplier, vfxOverride, extraData, data)
-	if not position then return end
-	local duration = abilityConfig.Duration or 10
-	local tickRate = abilityConfig.TickRate or 0.25
-	local radius = abilityConfig.HarvestRadius or 5
-	local baseAmount = (abilityConfig.HarvestAmount or 8) * multiplier
-	local pData = PlayerData.get(player)
-	local pinkBoost = (pData and pData.Stats and pData.Stats.BasePinkAlgae) or 0
-	local amount = baseAmount * (1 + math.floor(pinkBoost * 10) * 0.01)
-	VFXReplication:FireAllClients("Black Hole", player, fishIndex, {Position = position, Duration = duration})
-	task.spawn(function()
-		if abilityConfig.DamageTick == false then
-			AbilityService.DealAbilityDamage(player, position, abilityConfig)
-		end
-		local HarvestService = require(script.Parent.HarvestService)
-		local overlapParams = BuildAlgaeOverlapParams()
-		local elapsed, nextFishIndex = 0, 1
-		local lastDamageTick = 0
-		while elapsed < duration do
-			if not player or not player.Parent then break end
-			local myFish = {}
-			local tracked = playerFishPositions[player.UserId]
-			if tracked then for _, pos in pairs(tracked) do table.insert(myFish, pos) end end
-			if #myFish == 0 then
-				for _, child in ipairs(workspace:GetChildren()) do
-					if child.Name:match("^Fish_"..player.UserId.."_%d+$") and child:IsA("Model") and child.PrimaryPart then
-						table.insert(myFish, child.PrimaryPart.Position)
-					end
-				end
-			end
-			if #myFish > 0 then
-				if nextFishIndex > #myFish then nextFishIndex = 1 end
-				local fishPos = myFish[nextFishIndex]; nextFishIndex += 1
-				local toHarvest = {}
-				for _, part in ipairs(workspace:GetPartBoundsInRadius(fishPos, radius, overlapParams)) do
-					if part:IsA("BasePart") then table.insert(toHarvest, part) end
-				end
-				if #toHarvest > 0 then
-					HarvestService.HarvestMultipleBatched(player, toHarvest, amount, true)
-					VFXReplication:FireAllClients("BlackHoleCollect", player, nil, fishPos)
-				end
-			end
-			if type(abilityConfig.DamageTick) == "number" then
-				if elapsed - lastDamageTick >= abilityConfig.DamageTick then
-					AbilityService.DealAbilityDamage(player, position, abilityConfig)
-					lastDamageTick = elapsed
-				end
-			end
-			if player.Character and player.Character.PrimaryPart then
-				local buffRange = (abilityConfig.BuffRange or radius) + 5
-				if (player.Character.PrimaryPart.Position - position).Magnitude <= buffRange then
-					AbilityService.ApplyBuff(player, "PinkAlgaeBoost")
-				end
-			end
-			task.wait(tickRate); elapsed += tickRate
-		end
-	end)
 end
 
 -- Helper: Core Ability Execution logic
@@ -2086,6 +2017,13 @@ function AbilityService.TriggerChromaticBlast(player, color, specificPos)
 end
 
 RhythmHitEvent.OnServerEvent:Connect(function(player, rating, color)
+	local expected = AbilityService.ExpectedRhythmHits[player.UserId] or 0
+	if expected <= 0 then
+		warn("AbilityService: Rejected RhythmHitEvent from " .. player.Name .. " (no expected hits)")
+		return
+	end
+	AbilityService.ExpectedRhythmHits[player.UserId] = expected - 1
+	
 	-- print("AbilityService: Rhythm HIT from " .. player.Name .. " (" .. tostring(rating) .. ")")
 	-- Grant stacks based on rating
 	local stacks = 0
@@ -2133,6 +2071,11 @@ end)
 
 
 RhythmMissEvent.OnServerEvent:Connect(function(player)
+	local expected = AbilityService.ExpectedRhythmHits[player.UserId] or 0
+	if expected > 0 then
+		AbilityService.ExpectedRhythmHits[player.UserId] = expected - 1
+	end
+	
 	print("AbilityService: Rhythm MISS from " .. player.Name)
 	local userId = player.UserId
 	
