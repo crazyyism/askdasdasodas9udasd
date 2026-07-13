@@ -224,7 +224,7 @@ function ShopService.ProcessPurchase(player, shopName, itemId)
 		data.PurchaseStats[itemData.Name] = (data.PurchaseStats[itemData.Name] or 0) + 1
 		
 		-- Track specifically for Quest Progress!
-		if itemType == "Tool" or itemType == "Backpack" then
+		if itemData.ProductType == "Tool" or itemData.ProductType == "Backpack" then
 			data.EquipmentsPurchased = (data.EquipmentsPurchased or 0) + 1
 		end
 		
@@ -242,6 +242,12 @@ function ShopService.ProcessPurchase(player, shopName, itemId)
 			-- Calc total algae
 			for _, v in pairs(successData.Plankton or {}) do newBalance += v end
 		end
+		
+		-- Track Quest Progress
+		if spentAmount > 0 and itemData.Currency then
+			PlayerData.IncrementQuestGoal(player, "Use_" .. itemData.Currency, spentAmount)
+		end
+		PlayerData.IncrementQuestGoal(player, "ItemsPurchased", 1)
 		
 		ItemAddedEvent:FireClient(player, itemData.Name, itemData.Amount or 1, itemData.Currency, spentAmount, newBalance)
 	end

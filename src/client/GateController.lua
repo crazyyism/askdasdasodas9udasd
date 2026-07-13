@@ -13,6 +13,18 @@ local DataUpdateEvent = Remotes:WaitForChild("DataUpdateEvent")
 
 local clientData = {}
 
+local lmDoor = nil
+local function findLMDoor(parent)
+	for _, v in ipairs(parent:GetChildren()) do
+		if v.Name == "LMDoor" and v:IsA("BasePart") then
+			return v
+		end
+		local found = findLMDoor(v)
+		if found then return found end
+	end
+	return nil
+end
+
 local function UpdateGates()
 	if not gatesFolder then return end
 	if not clientData then return end
@@ -44,6 +56,17 @@ local function UpdateGates()
 			end
 		end
 	end
+	
+	-- Update Lava Monster Door
+	if lmDoor then
+		if clientData.LavaMonsterDefeated then
+			lmDoor.CanCollide = false
+			lmDoor.Transparency = 1
+		else
+			lmDoor.CanCollide = true
+			lmDoor.Transparency = 0.5
+		end
+	end
 end
 
 local function DeepMerge(target, source)
@@ -72,6 +95,17 @@ function GateController.Start()
 	
 	-- Initial Update loop (in case of streaming)
 	task.spawn(function()
+		-- Initial search for LMDoor
+		lmDoor = findLMDoor(workspace)
+		if not lmDoor then
+			workspace.DescendantAdded:Connect(function(descendant)
+				if descendant.Name == "LMDoor" and descendant:IsA("BasePart") then
+					lmDoor = descendant
+					UpdateGates()
+				end
+			end)
+		end
+		
 		while true do
 			task.wait(1)
 			UpdateGates()

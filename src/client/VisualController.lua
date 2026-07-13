@@ -206,8 +206,14 @@ function VisualController.Start()
 		end
 	end)
 	
-	DamageVisualEvent.OnClientEvent:Connect(function(pos, amount, isCrit, isMiss, isMegaCrit)
-		VisualController.SpawnDamageText(pos, amount, isCrit, isMiss, isMegaCrit)
+	DamageVisualEvent.OnClientEvent:Connect(function(arg1, amount, isCrit, isMiss, isMegaCrit, isAbility)
+		if type(arg1) == "table" then
+			for _, data in ipairs(arg1) do
+				VisualController.SpawnDamageText(data.pos, data.amount, data.isCrit, data.isMiss, data.isMegaCrit, data.isAbility)
+			end
+		else
+			VisualController.SpawnDamageText(arg1, amount, isCrit, isMiss, isMegaCrit, isAbility)
+		end
 	end)
 	
 	-- Reset container on character respawn
@@ -499,7 +505,7 @@ function VisualController.SpawnFloatingText(pos, amount, color, isCrit, sizeScal
 	})
 end
 
-function VisualController.SpawnDamageText(pos, amount, isCrit, isMiss, isMegaCrit)
+function VisualController.SpawnDamageText(pos, amount, isCrit, isMiss, isMegaCrit, isAbility)
 	-- Same spatial stacking logic as algae
 	local gridSize = 6
 	local gridPos = Vector3.new(math.floor(pos.X/gridSize), math.floor(pos.Y/gridSize), math.floor(pos.Z/gridSize))
@@ -558,16 +564,18 @@ function VisualController.SpawnDamageText(pos, amount, isCrit, isMiss, isMegaCri
 			color = Color3.fromRGB(255, 0, 255)
 		elseif isCrit then
 			color = Color3.fromRGB(255, 50, 50)
+		elseif isAbility then
+			color = Color3.fromRGB(255, 255, 0)
 		end
 	end
 	
 	label.TextColor3 = color
 	label.TextStrokeTransparency = 0
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.Cartoon
 	label.TextScaled = true
 	label.Parent = bb
 	
-	local baseScale = 0.8
+	local baseScale = isAbility and 0.6 or 0.4
 	local amountScale = 1
 	if not isMiss then
 		amountScale = math.clamp(0.57 + math.log10(amount) * 0.2, 0.57, 2.5)
@@ -928,7 +936,7 @@ VFXReplication.OnClientEvent:Connect(function(effectName, player, fishIndex, arg
 				local spin = elapsed * 1
 				local wobbleCF = CFrame.Angles(0, spin, 0) * CFrame.Angles(math.sin(elapsed * 3) * 0.1, 0, math.cos(elapsed * 2.5) * 0.1)
 				
-				sun.CFrame = CFrame.new(currentPos) * wobbleCF
+				sun.CFrame = CFrame.new(currentPos) * logicPart.CFrame.Rotation * wobbleCF
 				
 				-- 2. Opacity Calculation (Fade In / Out)
 				local alpha = 1 -- 1 = Invisible, 0 = Fully Visible

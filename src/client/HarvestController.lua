@@ -22,16 +22,34 @@ local activeAbilityConfig = nil
 
 local function getFieldFolder(fieldName)
 	if not fieldName then return nil end
+	
 	local folder = game.Workspace:FindFirstChild(fieldName)
 	if folder then return folder end
 	
+	local reefsFolder = game.Workspace:FindFirstChild("Reefs")
+	if reefsFolder then
+		folder = reefsFolder:FindFirstChild(fieldName)
+		if folder then return folder end
+	end
+	
 	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	
 	for _, child in ipairs(game.Workspace:GetChildren()) do
 		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
 		if childClean == cleanName then
 			return child
 		end
 	end
+	
+	if reefsFolder then
+		for _, child in ipairs(reefsFolder:GetChildren()) do
+			local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+			if childClean == cleanName then
+				return child
+			end
+		end
+	end
+	
 	return nil
 end
 
@@ -91,7 +109,7 @@ function HarvestController.attemptHarvest()
 	for fieldName, _ in pairs(ResourceConfig.Fields) do
 		local fieldFolder = getFieldFolder(fieldName)
 		if fieldFolder then
-			for _, part in ipairs(fieldFolder:GetChildren()) do
+			for _, part in ipairs(fieldFolder:GetDescendants()) do
 				if part:IsA("BasePart") and part.Transparency < 1 then
 					-- Horizontal Distance (XZ plane)
 					local dx = part.Position.X - rootPos.X
@@ -179,9 +197,9 @@ function HarvestController.attemptRainHarvest(radius, callback, exclusionMap)
 	end
 	
 	for fieldName, _ in pairs(ResourceConfig.Fields) do
-		local f = game.Workspace:FindFirstChild(fieldName)
+		local f = getFieldFolder(fieldName)
 		if f then
-			for _, p in ipairs(f:GetChildren()) do
+			for _, p in ipairs(f:GetDescendants()) do
 				local cap = p:FindFirstChild("Capacity")
 				if p:IsA("BasePart") and cap and cap.Value > 0 then
 					local dist = (p.Position - rootPos).Magnitude
@@ -197,12 +215,25 @@ function HarvestController.attemptRainHarvest(radius, callback, exclusionMap)
 	
 	local VFXController = require(script.Parent.VFXController)
 	
-	local closestMob = _G.OrbitTarget and (_G.OrbitTarget:FindFirstChild("Hitbox") or _G.OrbitTarget.PrimaryPart)
+	local closestMob = nil
+	if _G.OrbitTarget then
+		closestMob = _G.OrbitTarget:FindFirstChild("Hitbox") or _G.OrbitTarget.PrimaryPart
+	elseif _G.OrbitTargets then
+		for _, v in pairs(_G.OrbitTargets) do
+			if v and v.Parent and v.PrimaryPart then
+				closestMob = v:FindFirstChild("Hitbox") or v.PrimaryPart
+				break
+			end
+		end
+	end
+	
 	if not closestMob then
 		local bestDist = 100
-		for _, child in ipairs(workspace:GetChildren()) do
+		local mobsFolder = workspace:FindFirstChild("Mobs")
+		local mobList = mobsFolder and mobsFolder:GetChildren() or workspace:GetChildren()
+		for _, child in ipairs(mobList) do
 			if child:FindFirstChild("Health") and child:FindFirstChild("Level") and child.PrimaryPart then
-				if child:GetAttribute("TargetingPlayer") == true then
+				if child:GetAttribute("TargetingPlayer") == true or child:GetAttribute("MobType") == "King Frog" then
 					local targetPart = child:FindFirstChild("Hitbox") or child.PrimaryPart
 					local dist = (targetPart.Position - startPos).Magnitude
 					if dist < bestDist then
@@ -464,6 +495,8 @@ local function startHarvestLoop()
 				break
 			end
 			
+			local speedMult = currentStats.ToolSpeed or 1.0
+			
 			if initialToolName == "Sunkissed Art" or initialToolName == "SunkissedArt" then
 				if not _G.SunkissedComboTotal then _G.SunkissedComboTotal = 0 end
 				
@@ -549,9 +582,9 @@ local function startHarvestLoop()
 					if rootPos then
 						local candidates = {}
 						for fieldName, _ in pairs(ResourceConfig.Fields) do
-							local fieldFolder = game.Workspace:FindFirstChild(fieldName)
+							local fieldFolder = getFieldFolder(fieldName)
 							if fieldFolder then
-								for _, p in ipairs(fieldFolder:GetChildren()) do
+								for _, p in ipairs(fieldFolder:GetDescendants()) do
 									local cap = p:FindFirstChild("Capacity")
 									if p:IsA("BasePart") and cap and cap.Value > 0 then
 										if (p.Position - rootPos).Magnitude <= 30 then
@@ -568,7 +601,7 @@ local function startHarvestLoop()
 							local toolStats = ToolConfig[initialToolName] or ToolConfig["Sun Staff"] or {}
 							local harvestR = toolStats.HarvestRadius or 5
 							local rawCooldown = toolStats.Cooldown or 1.0
-							local tweenTime = rawCooldown * 0.5
+							local tweenTime = (rawCooldown / speedMult) * 0.5
 							
 							local sunPart = tool and (tool:FindFirstChild("Sun") or tool:FindFirstChild("FloatingBall"))
 							local wasAnchored = false
@@ -593,9 +626,9 @@ local function startHarvestLoop()
 							
 							local toHarvest = {}
 							for fieldName, _ in pairs(ResourceConfig.Fields) do
-								local fieldFolder = game.Workspace:FindFirstChild(fieldName)
+								local fieldFolder = getFieldFolder(fieldName)
 								if fieldFolder then
-									for _, p in ipairs(fieldFolder:GetChildren()) do
+									for _, p in ipairs(fieldFolder:GetDescendants()) do
 										local cap = p:FindFirstChild("Capacity")
 										if p:IsA("BasePart") and cap and cap.Value > 0 then
 											-- Use the scaled HarvestRadius around the targetAlgae block
@@ -665,7 +698,7 @@ local function startHarvestLoop()
 						local rawCooldown = toolStats.Cooldown or 1.0
 						local shurikenLifetime = toolStats.ShurikenLifetime or 1.5
 						local shurikenRange = toolStats.ShurikenRange or 20
-						local duration = shurikenLifetime
+						local duration = shurikenLifetime / speedMult
 						
 						-- Identify the active Grip Weld holding the Tool logically
 						local rightGrip = nil
@@ -737,9 +770,9 @@ local function startHarvestLoop()
 							
 							-- Hit detection using the central Handle naturally traversing ANY global field
 							for fieldName, _ in pairs(ResourceConfig.Fields) do
-								local currentField = game.Workspace:FindFirstChild(fieldName)
+								local currentField = getFieldFolder(fieldName)
 								if currentField then
-									for _, p in ipairs(currentField:GetChildren()) do
+									for _, p in ipairs(currentField:GetDescendants()) do
 										local cap = p:FindFirstChild("Capacity")
 										if p:IsA("BasePart") and cap and cap.Value > 0 then
 											if not hitBlocks[p] then
@@ -778,7 +811,7 @@ local function startHarvestLoop()
 
 			
 			if initialToolName == "Poseidon" then
-				task.wait(0.2) -- Delay capture to sync with animation impact
+				task.wait(0.2 / speedMult) -- Delay capture to sync with animation impact
 				
 				-- Play Harvest SFX
 				local vfxFolder = ReplicatedStorage:FindFirstChild("VFX")
@@ -792,13 +825,13 @@ local function startHarvestLoop()
 					game.Debris:AddItem(s, 1)
 				end
 			elseif initialToolName == "SharkScythe" then
-				task.wait(0.45)
+				task.wait(0.45 / speedMult)
 				-- VFX & SFX via Controller
 				VFXController.Play("SharkScythe", character)
 				
-				task.wait(0.21) -- Complete the 0.66s delay for harvest
+				task.wait(0.21 / speedMult) -- Complete the 0.66s delay for harvest
 			elseif initialToolName == "Sunkissed Art" or initialToolName == "SunkissedArt" then
-				task.wait(0.2)
+				task.wait(0.2 / speedMult)
 				
 				local isSfxDisabled = localData and localData.Settings and localData.Settings.DisableSFX
 				if not isSfxDisabled and character and character.PrimaryPart then
@@ -856,7 +889,10 @@ local function startHarvestLoop()
 				_G.PoseidonSwipeCount += 1
 				_G.PoseidonLastSwipe = os.clock()
 				
-				if _G.PoseidonSwipeCount % 6 == 0 then
+				local AbilityUIController = require(script.Parent.AbilityUIController)
+				local tidalSurgeStacks = AbilityUIController.GetBuffStacks("TidalSurge")
+
+				if _G.PoseidonSwipeCount % 6 == 0 or tidalSurgeStacks >= 200 then
 					local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 					local PoseidonWaveEvent = Remotes:FindFirstChild("PoseidonWaveEvent")
 					if PoseidonWaveEvent then
@@ -864,7 +900,15 @@ local function startHarvestLoop()
 						
 						-- Trigger Local Visuals Immediately
 						local VFXController = require(script.Parent.VFXController)
-						VFXController.Play("Wave", nil, {StartCFrame = character.PrimaryPart.CFrame})
+						local startCF = character.PrimaryPart.CFrame
+						VFXController.Play("Wave", nil, {StartCFrame = startCF})
+						
+						if tidalSurgeStacks >= 200 then
+							local cfLeft = startCF * CFrame.Angles(0, math.rad(45), 0)
+							local cfRight = startCF * CFrame.Angles(0, math.rad(-45), 0)
+							VFXController.Play("Wave", nil, {StartCFrame = cfLeft})
+							VFXController.Play("Wave", nil, {StartCFrame = cfRight})
+						end
 					end
 				end
 			end
@@ -984,11 +1028,11 @@ local function startHarvestLoop()
 			
 			-- Apply Tool Speed Stat
 			-- Formula: NewCooldown = Base / SpeedMultiplier
-			local speedMult = currentStats.ToolSpeed or 1.0
+			-- speedMult is already defined at top of loop
 			cooldown = cooldown / speedMult
 			
 			-- Add small buffer to prevent client/server timing mismatches
-			task.wait(cooldown + .15)
+			task.wait(cooldown + .03)
 		end
 		
 		isLoopRunning = false
@@ -1812,7 +1856,9 @@ local function onCharacterAdded(character)
 	backpack.ChildAdded:Connect(function(child)
 		if child.Name == activeToolName then
 			task.wait() -- Small yield to ensure physics/parenting ready
-			humanoid:EquipTool(child)
+			if humanoid.Parent then
+				humanoid:EquipTool(child)
+			end
 		end
 	end)
 	

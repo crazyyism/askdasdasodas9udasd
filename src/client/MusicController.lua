@@ -27,6 +27,10 @@ local function GetCurrentMusic()
 	
 	local pos = root.Position
 	
+	-- Check for boss override
+	local bossOverride = player:GetAttribute("BossMusicOverride")
+	if bossOverride then return bossOverride end
+	
 	-- Check for server override
 	local override = player:GetAttribute("MusicOverride")
 	if override then return override end
@@ -273,11 +277,31 @@ function MusicController.Start()
 	RunService.RenderStepped:Connect(function(dt)
 		local disableStrobing = lastData and lastData.Settings and lastData.Settings.DisableStrobing
 		
-		-- Handle "To The Moon" Visualizer for LocalPlayer
-		local localOverride = player:GetAttribute("MusicOverride")
-		local localIsToTheMoon = (localOverride == MusicConfig["ToTheMoon"])
+		-- Handle "To The Moon" Visualizer for LocalPlayer or Nearby Players
+		local localIsToTheMoon = false
+		local timePos = 0
+		local localPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
 		
-		local timePos = currentSound and currentSound.IsPlaying and currentSound.TimePosition or 0
+		for _, p in ipairs(Players:GetPlayers()) do
+			local override = p:GetAttribute("MusicOverride")
+			if override == MusicConfig["ToTheMoon"] then
+				if p == player then
+					localIsToTheMoon = true
+					timePos = currentSound and currentSound.IsPlaying and currentSound.TimePosition or 0
+					break
+				elseif localPos and p.Character and p.Character.PrimaryPart then
+					local dist = (p.Character.PrimaryPart.Position - localPos).Magnitude
+					if dist <= 150 then
+						localIsToTheMoon = true
+						if activeEffects[p.UserId] and activeEffects[p.UserId].Sound then
+							timePos = activeEffects[p.UserId].Sound.TimePosition
+						end
+						break
+					end
+				end
+			end
+		end
+		
 		local inVfxWindow = IsInVfxWindow(timePos)
 		
 		if localIsToTheMoon and not disableStrobing and inVfxWindow then

@@ -230,7 +230,8 @@ function AquariumController.Start()
 		if not char or not char.PrimaryPart then return end
 		
 		local root = char.PrimaryPart.Position
-		local aquariums = workspace:WaitForChild("Aquariums"):GetChildren()
+		local aquariumsFolder = workspace:FindFirstChild("Aquariums")
+		local aquariums = aquariumsFolder and aquariumsFolder:GetChildren() or {}
 		
 		local nearest = nil
 		local dist = 8 -- Interaction Radius
@@ -283,11 +284,11 @@ function AquariumController.Start()
 							upgradeFrame.Visible = true
 							upgradeKeybindLabel.Text = "F"
 							local currentLevel = (playerData and playerData.AquariumLevel) or 0
-							local cost = 2500 * math.pow(2, currentLevel)
+							local cost = math.floor(2500 * math.pow(3, currentLevel))
 							local useAbbr = playerData and playerData.Settings and playerData.Settings.AbbreviateAlgae
 							
-							local currentMult = math.pow(1.5, currentLevel)
-							local nextMult = math.pow(1.5, currentLevel + 1)
+							local currentMult = math.pow(1.25, currentLevel)
+							local nextMult = math.pow(1.25, currentLevel + 1)
 							local currentStr = string.format("%.2f", currentMult):gsub("%.?0+$", "") .. "x"
 							local nextStr = string.format("%.2f", nextMult):gsub("%.?0+$", "") .. "x"
 							
@@ -304,24 +305,44 @@ function AquariumController.Start()
 				end
 
 			elseif lbl and lbl.Text == "Unclaimed" then
-				canClaim = true
-				claimTarget = nearest
-				interactionFrame.Visible = true
-				if upgradeFrame then upgradeFrame.Visible = false end
-				keybindLabel.Text = "E"
-				actionLabel.Text = "Claim Aquarium"
+				local hasAquarium = false
+				for _, plot in ipairs(aquariums) do
+					local owner = plot:FindFirstChild("Ownership")
+					local gui2 = owner and owner:FindFirstChild("SurfaceGui")
+					local lbl2 = gui2 and gui2:FindFirstChild("TextLabel")
+					if lbl2 and lbl2.Text == expected then
+						hasAquarium = true
+						break
+					end
+				end
 				
-				local spawnPart = nearest:FindFirstChild("Spawn")
-				if spawnPart then
-					local cam = workspace.CurrentCamera
-					local worldPos = spawnPart.Position + Vector3.new(0, 5, 0)
-					local vector, onScreen = cam:WorldToScreenPoint(worldPos)
+				if not hasAquarium then
+					canClaim = true
+					claimTarget = nearest
+					interactionFrame.Visible = true
+					if upgradeFrame then upgradeFrame.Visible = false end
+					keybindLabel.Text = "E"
+					actionLabel.Text = "Claim Aquarium"
 					
-					if onScreen then
-						local currentPos = interactionFrame.Position
-						local targetPos = UDim2.new(0, vector.X, 0, vector.Y)
-						interactionFrame.Position = currentPos:Lerp(targetPos, 0.2)
-					else
+					local spawnPart = nearest:FindFirstChild("Spawn")
+					if spawnPart then
+						local cam = workspace.CurrentCamera
+						local worldPos = spawnPart.Position + Vector3.new(0, 5, 0)
+						local vector, onScreen = cam:WorldToScreenPoint(worldPos)
+						
+						if onScreen then
+							local currentPos = interactionFrame.Position
+							local targetPos = UDim2.new(0, vector.X, 0, vector.Y)
+							interactionFrame.Position = currentPos:Lerp(targetPos, 0.2)
+						else
+							interactionFrame.Visible = false
+						end
+					end
+				else
+					canClaim = false
+					claimTarget = nil
+					if upgradeFrame then upgradeFrame.Visible = false end
+					if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Wish") and not actionLabel.Text:match("Machine") then
 						interactionFrame.Visible = false
 					end
 				end
@@ -331,7 +352,7 @@ function AquariumController.Start()
 				canClaim = false
 				claimTarget = nil
 				if upgradeFrame then upgradeFrame.Visible = false end
-				if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Machine") then
+				if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Wish") and not actionLabel.Text:match("Machine") then
 					interactionFrame.Visible = false
 				end
 			end
@@ -343,7 +364,7 @@ function AquariumController.Start()
 			
 			-- Only hide if WE owns it (check text) or if it's generic
 			-- Prevents hiding Shop interaction
-			if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Machine") then
+			if not actionLabel.Text:match("Shop") and not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Wish") and not actionLabel.Text:match("Machine") then
 				interactionFrame.Visible = false
 			end
 		end
@@ -651,7 +672,7 @@ function AquariumController.OpenFishInfo(slotId)
 			finalCF = CFrame.new(0, 0, 0) * currentRotation * desiredOffset
 			
 			if m.PrimaryPart then
-				m:SetPrimaryPartCFrame(finalCF)
+				m:PivotTo(finalCF)
 			else
 				m:PivotTo(finalCF)
 			end
@@ -747,7 +768,7 @@ function AquariumController.OpenFishInfo(slotId)
 			local offsetCF = CFrame.new(dx, dy, dz) * CFrame.Angles(swayX, 0, swayZ)
 			
 			if m.PrimaryPart then
-				m:SetPrimaryPartCFrame(finalCF * offsetCF)
+				m:PivotTo(finalCF * offsetCF)
 			else
 				m:PivotTo(finalCF * offsetCF)
 			end

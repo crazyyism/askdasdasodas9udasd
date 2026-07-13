@@ -108,6 +108,8 @@ local DEFAULT_DATA = {
 	EquippedTool = "Fishing Net",
 	UnlockedTools = { "Fishing Net" },
 	UnlockedBackpacks = { "Pouch" },
+	ActiveBuffs = {},
+	IsConverting = false,
 	Inventory = { "Basic Egg" },
 	UnlockedArtifacts = {},
 	EquippedArtifacts = {},
@@ -120,6 +122,8 @@ local DEFAULT_DATA = {
 	LavaEnhancements = 0,
 	LavaTurtleQuestsCompleted = 0,
 	NoobieTurtleQuestsCompleted = 0,
+	ElderTurtleQuestsCompleted = 0,
+	LavaMonsterDefeated = false,
 	Settings = {
 		AlgaeText = true,
 		AbbreviateAlgae = false,
@@ -131,10 +135,14 @@ local DEFAULT_DATA = {
 		HighlightFish = false,
 		HideOtherFish = false,
 		DisableSFX = false,
+		HitboxVisualizer = false,
+		DisableParallax = false,
+		DisableDynamicCamera = false,
 		UntilLegendary = false,
 		UntilMythic = false,
 	},
 	TutorialCompleted = false,
+	LastShrineClaim = 0,
 }
 
 local function DeepCopy(orig)
@@ -198,6 +206,12 @@ local function SanitizeData(data)
 			data._InventoryDirty = true 
 		end
 		
+		if data.Inventory["Pearl"] then
+			data.Pearls = (data.Pearls or 0) + data.Inventory["Pearl"]
+			data.Inventory["Pearl"] = nil
+			data._InventoryDirty = true
+		end
+		
 		-- Migrate Mythic Egg -> Heavensent Egg
 		local old1 = data.Inventory["mythic Egg"]
 		local old2 = data.Inventory["Mythic Egg"]
@@ -237,6 +251,8 @@ local function SanitizeData(data)
 	
 	-- Note: CollectedTokens is a table of timestamps/bools, we don't need deep validation but ensure it exists
 	if not data.CollectedTokens then data.CollectedTokens = {} end
+	
+	if type(data.ActiveBuffs) ~= "table" then data.ActiveBuffs = {} end
 	
 	return data
 end
@@ -358,7 +374,7 @@ function PlayerData.RecalculateStats(data, player)
 	-- Apply Aquarium Upgrades (1.5x exponential)
 	local aqBoost = 1.0
 	if data.AquariumLevel and data.AquariumLevel > 0 then
-		aqBoost = math.pow(1.5, data.AquariumLevel)
+		aqBoost = math.pow(1.25, data.AquariumLevel)
 		data.Stats.ConvertMultiplier = data.Stats.ConvertMultiplier * aqBoost
 	end
 	data.Stats.AquariumMultiplier = aqBoost
@@ -556,20 +572,16 @@ function PlayerData.start(player)
 			if RunService:IsStudio() and (string.find(tostring(result), "API Services rejected") or string.find(tostring(result), "Studio access to APIs")) then
 				warn("⚠️ Studio API Access is disabled. Data will not save. Enable in Game Settings > Security > Enable Studio Access to API Services.")
 				isDeadDataStore = true
+				SessionData[player.UserId] = DeepCopy(DEFAULT_DATA)
 			else
-				-- Critical Failure: Mark as failed load to prevent overwriting data with empty defaults
-				if not SessionData[player.UserId] then SessionData[player.UserId] = {} end
-				SessionData[player.UserId]._LoadFailed = true
-				
-				-- Notify player? kick? For now, just ensuring we don't save is the priority.
-				-- We still load default data so they can play, but we WON'T save it.
+				-- Critical Failure: Session locked or datastores down.
+				-- Kick the player so they don't spawn in with 0 stats and think their data was wiped!
+				player:Kick("Failed to load your save data (Session might still be saving in your previous server). Please wait a few seconds and rejoin!")
+				return
 			end
-		end
-		
-		SessionData[player.UserId] = DeepCopy(DEFAULT_DATA)
-		if not success and not isDeadDataStore then
-			-- Re-apply flag to the fresh session object
-			SessionData[player.UserId]._LoadFailed = true
+		else
+			-- If success but result is nil (should not happen due to UpdateAsync logic)
+			SessionData[player.UserId] = DeepCopy(DEFAULT_DATA)
 		end
 		
 		-- Sync default capacity
@@ -827,6 +839,8 @@ function PlayerData.IncrementQuestGoal(player, goalKey, amount)
 			-- If it's NoobieTurtle, the qConfig might be missing or different, but the Quests table holds the generated one natively.
 			if questId == "NoobieTurtle" and QuestConfig.Quests["NoobieTurtle"] then
 				qConfig = QuestConfig.Quests["NoobieTurtle"]
+			elseif questId == "ElderTurtle" and QuestConfig.Quests["ElderTurtle"] then
+				qConfig = QuestConfig.Quests["ElderTurtle"]
 			end
 			
 			if qConfig and qConfig.Goals and qConfig.Goals[goalKey] then

@@ -8,6 +8,22 @@ local player = Players.LocalPlayer
 local interactionDebounce = false
 local nearestCannon = nil
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local DataUpdateEvent = Remotes:WaitForChild("DataUpdateEvent")
+
+local currentFishCount = 0
+
+DataUpdateEvent.OnClientEvent:Connect(function(data)
+	if data.FishSchool then
+		local count = 0
+		for _, _ in pairs(data.FishSchool) do
+			count = count + 1
+		end
+		currentFishCount = count
+	end
+end)
+
 function CannonController.Start()
 	local playerGui = player:WaitForChild("PlayerGui", 10)
 	if not playerGui then return end
@@ -46,7 +62,7 @@ function CannonController.Start()
 
 	local function FindNearCannon(rootPos)
 		local closest = nil
-		local minDist = 25 -- Interact range increased for large models
+		local minDist = 40 -- Interact range increased for large models
 
 		for _, targetPart in ipairs(knownCannons) do
 			if targetPart and targetPart.Parent then
@@ -63,6 +79,18 @@ function CannonController.Start()
 
 	local function LaunchPlayer(cannonPart)
 		if interactionDebounce then return end
+		
+		local searchTarget = cannonPart
+		if cannonPart.Parent and cannonPart.Parent.Name == "Cannon" then
+			searchTarget = cannonPart.Parent
+		end
+		local reqObj = searchTarget:FindFirstChild("FishRequired") or cannonPart:FindFirstChild("FishRequired")
+		local required = reqObj and reqObj:IsA("IntValue") and reqObj.Value or 0
+		
+		if currentFishCount < required then
+			return
+		end
+
 		local char = player.Character
 		if not char then return end
 		local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -135,10 +163,25 @@ function CannonController.Start()
 				if onScreen then
 					local targetPos = UDim2.fromOffset(vector.X, vector.Y)
 					interactionFrame.Position = interactionFrame.Position:Lerp(targetPos, 0.2)
+				else
+					interactionFrame.Visible = false
 				end
 				
+				local searchTarget = nearestCannon
+				if nearestCannon.Parent and nearestCannon.Parent.Name == "Cannon" then
+					searchTarget = nearestCannon.Parent
+				end
+				local reqObj = searchTarget:FindFirstChild("FishRequired") or nearestCannon:FindFirstChild("FishRequired")
+				local required = reqObj and reqObj:IsA("IntValue") and reqObj.Value or 0
+				
 				keybindLabel.Text = "E"
-				actionLabel.Text = "Use Cannon"
+				if currentFishCount < required then
+					actionLabel.Text = "Cannon (" .. required .. " Fish Req)"
+					actionLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+				else
+					actionLabel.Text = "Use Cannon"
+					actionLabel.TextColor3 = Color3.new(1, 1, 1)
+				end
 			end
 		else
 			-- If the screen is showing Cannon text and no cannon is near, hide it

@@ -11,20 +11,43 @@ local DataUpdateEvent = Remotes:WaitForChild("DataUpdateEvent")
 local HueShifter = require(ReplicatedStorage.Shared.HueShifter)
 local AbilityUIController = require(script.Parent.AbilityUIController)
 
+local localData = nil
+DataUpdateEvent.OnClientEvent:Connect(function(data)
+	localData = data
+end)
+
 local FishController = {}
 
 local function getFieldFolder(fieldName)
 	if not fieldName then return nil end
+	
 	local folder = game.Workspace:FindFirstChild(fieldName)
 	if folder then return folder end
 	
+	local reefsFolder = game.Workspace:FindFirstChild("Reefs")
+	if reefsFolder then
+		folder = reefsFolder:FindFirstChild(fieldName)
+		if folder then return folder end
+	end
+	
 	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	
 	for _, child in ipairs(game.Workspace:GetChildren()) do
 		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
 		if childClean == cleanName then
 			return child
 		end
 	end
+	
+	if reefsFolder then
+		for _, child in ipairs(reefsFolder:GetChildren()) do
+			local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+			if childClean == cleanName then
+				return child
+			end
+		end
+	end
+	
 	return nil
 end
 
@@ -65,6 +88,10 @@ local S_CONVERT_TO_SLOT = "ConvertToSlot"
 local S_CONVERT_WAIT = "ConvertWait"
 local S_ORBIT_ATTACK = "OrbitAttack"
 local S_CASTING_ABILITY = "CastingAbility"
+
+local GlobalAbilityQueue = {}
+local GlobalAbilityCooldown = 2.5
+local NextGlobalAbilityTime = 0
 
 if not _G.LoggedConv then _G.LoggedConv = {} end
 
@@ -111,9 +138,12 @@ function FishController.Start()
 	local FishStateRelay = Remotes:WaitForChild("FishStateRelay")
 	FishStateRelay.OnClientEvent:Connect(function(arg1, arg2)
 		if typeof(arg1) == "table" then
-			if arg1.OrbitTarget ~= nil then
+			if arg1.OrbitTargets ~= nil then
+				_G.OrbitTargets = arg1.OrbitTargets
+			elseif arg1.OrbitTarget ~= nil then
 				_G.OrbitTarget = arg1.OrbitTarget
 			else
+				_G.OrbitTargets = nil
 				_G.OrbitTarget = nil
 			end
 		end
@@ -503,8 +533,10 @@ function SpawnRemoteFish(uid, idx, data)
 	clone:SetAttribute("FishID", data.Id)
 	clone:SetAttribute("OwnerUserId", uid)
 	
-	if clone.PrimaryPart and clone.PrimaryPart:FindFirstChild("EnergyGui") then
-		clone.PrimaryPart.EnergyGui:Destroy()
+	for _, desc in ipairs(clone:GetDescendants()) do
+		if desc.Name == "EnergyGui" then
+			desc:Destroy()
+		end
 	end
 	
 	for _, p in ipairs(clone:GetDescendants()) do
@@ -586,8 +618,10 @@ function SpawnFish(index, fishData)
 	clone:SetAttribute("OwnerUserId", player.UserId)
 	clone:SetAttribute("Level", fishData.Level or 1)
 	
-	if clone.PrimaryPart and clone.PrimaryPart:FindFirstChild("EnergyGui") then
-		clone.PrimaryPart.EnergyGui:Destroy()
+	for _, desc in ipairs(clone:GetDescendants()) do
+		if desc.Name == "EnergyGui" then
+			desc:Destroy()
+		end
 	end
 	
 	-- Setup Model
@@ -661,7 +695,7 @@ function SpawnFish(index, fishData)
 		local slotCF = spawnPart:IsA("BasePart") and spawnPart.CFrame or slotInstance:GetPivot()
 		
 		-- Face away from the front (assuming Front is where the face is)
-		clone:SetPrimaryPartCFrame(slotCF * CFrame.new(0, 0, 2))
+		clone:PivotTo(slotCF * CFrame.new(0, 0, 2))
 	else
 		-- Fallback to player
 		if player.Character and player.Character.PrimaryPart then
@@ -670,7 +704,7 @@ function SpawnFish(index, fishData)
 			local radius = math.random(5, 15)
 			local offsetX = math.cos(angle) * radius
 			local offsetZ = math.sin(angle) * radius
-			clone:SetPrimaryPartCFrame(player.Character.PrimaryPart.CFrame * CFrame.new(offsetX, math.random(2, 8), offsetZ))
+			clone:PivotTo(player.Character.PrimaryPart.CFrame * CFrame.new(offsetX, math.random(2, 8), offsetZ))
 		end
 	end
 	
@@ -778,30 +812,27 @@ local function IsPlayerInField(char)
 	local root = char.PrimaryPart
 	if not root then return nil end
 	
-	-- Raycast down with penetration
-	local params = RaycastParams.new()
-	local ignoreList = {char}
-	params.FilterDescendantsInstances = ignoreList
-	params.FilterType = Enum.RaycastFilterType.Exclude
+	-- Robust zone detection: Find the closest algae within a radius
+	-- This works even when algae shrink or turn transparent
+	local params = OverlapParams.new()
+	local fieldFolders = {}
+	for fieldName, _ in pairs(ResourceConfig.Fields) do
+		local f = getFieldFolder(fieldName)
+		if f then table.insert(fieldFolders, f) end
+	end
 	
-	local attempts = 5
-	local ray = game.Workspace:Raycast(root.Position, Vector3.new(0, -20, 0), params)
+	if #fieldFolders == 0 then return nil end
 	
-	while ray and ray.Instance and attempts > 0 do
-		local parent = ray.Instance.Parent
+	params.FilterDescendantsInstances = fieldFolders
+	params.FilterType = Enum.RaycastFilterType.Include
+	
+	local parts = workspace:GetPartBoundsInRadius(root.Position, 30, params)
+	
+	-- Iterate through hits, return the first valid field found
+	for _, part in ipairs(parts) do
+		local parent = part.Parent
 		if parent and GetFieldConfig(parent.Name) then
 			return parent.Name
-		end
-		
-		-- If hit PinHitbox or transparent debris, ignore and retry
-		if ray.Instance.Name == "PinHitbox" or ray.Instance.Transparency >= 0.95 then
-			table.insert(ignoreList, ray.Instance)
-			params.FilterDescendantsInstances = ignoreList
-			ray = game.Workspace:Raycast(root.Position, Vector3.new(0, -20, 0), params)
-			attempts -= 1
-		else
-			-- Hit something solid that isn't a field (e.g. ground outside field)
-			break
 		end
 	end
 	
@@ -903,6 +934,33 @@ end
 
 
 function FishController.OnHeartbeat(dt)
+	local time = os.clock()
+	
+	-- Process Global Ability Queue
+	if time >= NextGlobalAbilityTime and #GlobalAbilityQueue > 0 then
+		local entry = GlobalAbilityQueue[1]
+		local numericSlot = tostring(entry.FishIndex)
+		local model = spawnedFish[numericSlot]
+		local state = _G.FishStates and _G.FishStates[model]
+		
+		-- Ensure player is actually in a reef before triggering
+		local player = Players.LocalPlayer
+		local char = player and player.Character
+		local inField = IsPlayerInField(char)
+		
+		if model and state then
+			if not state.PerformingAbility and not state.AbilityToPerform then
+				if inField then
+					table.remove(GlobalAbilityQueue, 1)
+					state.AbilityToPerform = entry.AbilityName
+					NextGlobalAbilityTime = time + GlobalAbilityCooldown
+				end
+			end
+		else
+			-- Fish destroyed or missing, drop it
+			table.remove(GlobalAbilityQueue, 1)
+		end
+	end
 						
 	-- REMOTE FISH UPDATE
 	-- Broadcast Local Fish States Periodically (High frequency CF sync)
@@ -945,6 +1003,7 @@ function FishController.OnHeartbeat(dt)
 
 	local settings = playerData and playerData.Settings
 	local hideOthers = settings and settings.HideOtherFish or false
+	local localPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position
 
 	for uid, userFish in pairs(remoteFish) do
 		local userStates = remoteFishStates[uid]
@@ -955,6 +1014,14 @@ function FishController.OnHeartbeat(dt)
 			if model and model.PrimaryPart then
 				-- Handle Visibility
 				local isVisible = not hideOthers
+				
+				if isVisible and localPos then
+					local dist = (model.PrimaryPart.Position - localPos).Magnitude
+					if dist > 150 then -- Culling distance
+						isVisible = false
+					end
+				end
+				
 				if isVisible and model.Parent == nil then
 					model.Parent = game.Workspace
 				elseif not isVisible and model.Parent ~= nil then
@@ -990,7 +1057,7 @@ function FishController.OnHeartbeat(dt)
 					
 					-- 1. Sync Movement (Smooth Lerp to exact owner position & wiggle)
 					if targetCF then
-						model:SetPrimaryPartCFrame(model.PrimaryPart.CFrame:Lerp(targetCF, 0.25))
+						model:PivotTo(model.PrimaryPart.CFrame:Lerp(targetCF, 0.25))
 					end
 					
 					-- 2. Sync State-Specific Visuals
@@ -998,7 +1065,7 @@ function FishController.OnHeartbeat(dt)
 						-- Orientation only if target known (Movement is baked into CF)
 						if rTarget then
 							local look = CFrame.lookAt(model.PrimaryPart.Position, rTarget)
-							model:SetPrimaryPartCFrame(model.PrimaryPart.CFrame:Lerp(look, 0.1))
+							model:PivotTo(model.PrimaryPart.CFrame:Lerp(look, 0.1))
 						end
 						ConversionVisualController.RemoveBeamsFromFish(model)
 					elseif rState == S_CONVERT_WAIT or rState == S_CONVERT_TO_SLOT or rState == S_CONVERT_TO_PLAYER then
@@ -1047,7 +1114,7 @@ function FishController.OnHeartbeat(dt)
 							local dist = (target - currentPos).Magnitude
 							if dist > 0.1 then
 								local look = CFrame.lookAt(currentPos, target)
-								model:SetPrimaryPartCFrame(model.PrimaryPart.CFrame:Lerp(look + dir * (dt * 8), 0.1))
+								model:PivotTo(model.PrimaryPart.CFrame:Lerp(look + dir * (dt * 8), 0.1))
 							end
 						end
 						
@@ -1069,7 +1136,7 @@ function FishController.OnHeartbeat(dt)
 						
 						-- Teleport if too far
 						if (destination - currentPos).Magnitude > 50 then
-							model:SetPrimaryPartCFrame(CFrame.new(destination))
+							model:PivotTo(CFrame.new(destination))
 						else
 							-- Move
 							local vec = (destination - currentPos)
@@ -1084,7 +1151,7 @@ function FishController.OnHeartbeat(dt)
 								local lookAt = ownerRoot.Position
 								local lookCF = CFrame.lookAt(newPos, lookAt)
 								
-								model:SetPrimaryPartCFrame(model.PrimaryPart.CFrame:Lerp(lookCF, 0.1) + (newPos - currentPos))
+								model:PivotTo(model.PrimaryPart.CFrame:Lerp(lookCF, 0.1) + (newPos - currentPos))
 							end
 						end
 					end
@@ -1238,7 +1305,7 @@ function FishController.OnHeartbeat(dt)
 				state.LastMoveTime = time
 				-- Visual snap if really far
 				if (rootPos - currentPos).Magnitude > 50 then
-					model:SetPrimaryPartCFrame(CFrame.new(rootPos))
+					model:PivotTo(CFrame.new(rootPos))
 				end
 			end
 		end
@@ -1282,39 +1349,44 @@ function FishController.OnHeartbeat(dt)
 			local fId = model:GetAttribute("FishID") or "Basic Fish"
 			local cfg = FishConfig.Fish[fId]
 			
-			-- Check if fish has ability (support both old and new systems)
-			local hasAbility = (cfg and (cfg.Ability or cfg.AbilityName))
-			if not hasAbility then return end
-			
-			state.PerformingAbility = true
 			state.AbilityReady = false
 			state.Energy = 0
-			state.AbilityTriggerDelay = nil -- Clear staggered trigger
+			state.AbilityTriggerDelay = nil
 			
-			-- Determine ability to trigger
-			local abilityToTrigger = cfg.AbilityName or (cfg.Ability and cfg.Ability.Name)
-			
-			-- Support Secondary Abilities (e.g. Bloodthirst, Surging Pins)
-			if cfg.SecondaryAbilities and #cfg.SecondaryAbilities > 0 then
-				local pool = {abilityToTrigger}
-				for _, sub in ipairs(cfg.SecondaryAbilities) do
-					local abilityCfg = FishConfig.Abilities[sub]
-					local reqLevel = abilityCfg and abilityCfg.LevelRequired or 0
-					
-					local fishLevel = 1
-					local pData = _G.ClientData
-					if pData and pData.FishSchool then
-						local fData = pData.FishSchool[i] or pData.FishSchool[tostring(i)]
-						if fData and fData.Level then fishLevel = fData.Level end
-					end
-					
-					if fishLevel >= reqLevel then
-						table.insert(pool, sub)
+			local hasAbility = (cfg and (cfg.Ability or cfg.AbilityName))
+			if hasAbility then
+				local pool = {}
+				local baseAbil = cfg.AbilityName or (cfg.Ability and cfg.Ability.Name)
+				if baseAbil then table.insert(pool, baseAbil) end
+				
+				if cfg.SecondaryAbilities and #cfg.SecondaryAbilities > 0 then
+					for _, sub in ipairs(cfg.SecondaryAbilities) do
+						local abilityCfg = FishConfig.Abilities[sub]
+						local reqLevel = abilityCfg and abilityCfg.LevelRequired or 0
+						
+						local fishLevel = 1
+						local pData = _G.ClientData
+						if pData and pData.FishSchool then
+							local fData = pData.FishSchool[i] or pData.FishSchool[tostring(i)]
+							if fData and fData.Level then fishLevel = fData.Level end
+						end
+						
+						if fishLevel >= reqLevel then
+							table.insert(pool, sub)
+						end
 					end
 				end
-				local rng = Random.new()
-				abilityToTrigger = pool[rng:NextInteger(1, #pool)]
+				
+				for _, ab in ipairs(pool) do
+					table.insert(GlobalAbilityQueue, {FishIndex = i, AbilityName = ab})
+				end
 			end
+		end
+		
+		if state.AbilityToPerform and not state.PerformingAbility then
+			local abilityToTrigger = state.AbilityToPerform
+			state.AbilityToPerform = nil
+			state.PerformingAbility = true
 			
 			if abilityToTrigger == "Obsession" then
 				state.PerformingAbility = true -- Redundant but safe
@@ -1346,7 +1418,7 @@ function FishController.OnHeartbeat(dt)
 						local velocity = math.cos(progress * math.pi) * jumpHeight
 						local pitch = math.atan(velocity * 0.3)
 						local facingCF = CFrame.lookAt(newPos, newPos + jumpDirection) * CFrame.Angles(pitch, 0, 0)
-						model:SetPrimaryPartCFrame(facingCF)
+						model:PivotTo(facingCF)
 						
 						task.wait(0.016)
 					end
@@ -1358,6 +1430,20 @@ function FishController.OnHeartbeat(dt)
 				state.PerformingAbility = true
 				
 				local startPos = currentPos
+				
+				-- Snap startPos to ground so the first slam doesn't float above mobs
+				local snapParams = RaycastParams.new()
+				snapParams.FilterType = Enum.RaycastFilterType.Exclude
+				local filterDesc = {}
+				if workspace:FindFirstChild("Fish") then table.insert(filterDesc, workspace.Fish) end
+				if workspace:FindFirstChild("Mobs") then table.insert(filterDesc, workspace.Mobs) end
+				snapParams.FilterDescendantsInstances = filterDesc
+				
+				local snapRay = workspace:Raycast(startPos + Vector3.new(0, 50, 0), Vector3.new(0, -150, 0), snapParams)
+				if snapRay then
+					startPos = Vector3.new(startPos.X, snapRay.Position.Y, startPos.Z)
+				end
+				
 				local spots = {startPos}
 				
 				-- Pre-calculate closest field ONCE per ability trigger
@@ -1385,13 +1471,14 @@ function FishController.OnHeartbeat(dt)
 					if closestField then
 						local parts = closestField:GetChildren()
 						if #parts > 0 then
-							local targetCount = 0
 							local randPart = nil
 							-- Try to find a node within maxR distance (safety cutoff after 15 tries)
 							for _ = 1, 15 do
-								randPart = parts[math.random(1, #parts)]
-								if randPart:IsA("BasePart") then
-									if (origin - randPart.Position).Magnitude <= maxR then
+								local candidate = parts[math.random(1, #parts)]
+								if candidate:IsA("BasePart") and candidate:FindFirstChild("Capacity") then
+									local d = (candidate.Position - origin).Magnitude
+									if d <= maxR then
+										randPart = candidate
 										break
 									end
 								end
@@ -1400,17 +1487,32 @@ function FishController.OnHeartbeat(dt)
 							if randPart and randPart:IsA("BasePart") then
 								local newX = randPart.Position.X + Random.new():NextNumber(-2, 2)
 								local newZ = randPart.Position.Z + Random.new():NextNumber(-2, 2)
-								return Vector3.new(newX, origin.Y, newZ)
+								return Vector3.new(newX, randPart.Position.Y, newZ)
 							end
 						end
 					end
 					
-					-- Fallback to pure local radius
+					-- Fallback to pure local radius ONLY if no field exists
+					if closestField then
+						for _, candidate in ipairs(closestField:GetChildren()) do
+							if candidate:IsA("BasePart") and candidate:FindFirstChild("Capacity") then
+								local newX = candidate.Position.X + Random.new():NextNumber(-2, 2)
+								local newZ = candidate.Position.Z + Random.new():NextNumber(-2, 2)
+								return Vector3.new(newX, candidate.Position.Y, newZ)
+							end
+						end
+					end
+					
 					local r = Random.new():NextNumber(minR, maxR)
 					local angle = Random.new():NextNumber(0, math.pi * 2)
 					local offset = Vector3.new(math.cos(angle)*r, 0, math.sin(angle)*r)
 					local newPos = origin + offset
-					return Vector3.new(newPos.X, origin.Y, newPos.Z)
+					
+					-- Raycast down to find ground level for fallback
+					local rayRes = workspace:Raycast(Vector3.new(newPos.X, newPos.Y + 100, newPos.Z), Vector3.new(0, -200, 0), snapParams)
+					local groundY = rayRes and rayRes.Position.Y or 0
+					
+					return Vector3.new(newPos.X, groundY, newPos.Z)
 				end
 				
 				-- 1st is current pos, 2nd-6th are random (6 total spots = 5 extra loops)
@@ -1501,7 +1603,7 @@ function FishController.OnHeartbeat(dt)
 							
 							local facingCF = CFrame.lookAt(newPos, newPos + jumpDirection) * CFrame.Angles(pitch, 0, 0)
 							if model and model.PrimaryPart then
-								model:SetPrimaryPartCFrame(facingCF)
+								model:PivotTo(facingCF)
 							end
 							task.wait(0.016)
 						end
@@ -1513,7 +1615,7 @@ function FishController.OnHeartbeat(dt)
 
 						currentPoint = targetPoint
 						if model and model.PrimaryPart then
-							model:SetPrimaryPartCFrame(CFrame.lookAt(targetPoint, targetPoint + jumpDirection))
+							model:PivotTo(CFrame.lookAt(targetPoint, targetPoint + jumpDirection))
 						end
 						
 						-- Visuals/SFX play when slamming
@@ -1651,7 +1753,7 @@ function FishController.OnHeartbeat(dt)
 						
 						-- Apply CFrame
 						if model and model.PrimaryPart then
-							model:SetPrimaryPartCFrame(facingCF)
+							model:PivotTo(facingCF)
 						end
 						
 						task.wait(0.03) -- ~30 FPS for smooth animation
@@ -1679,7 +1781,7 @@ function FishController.OnHeartbeat(dt)
 		if cfg and cfg.Passive == "Overtaking Melody" then
 			local stacks = AbilityUIController.GetBuffStacks("RhythmFever")
 			if stacks > 0 then
-				local boost = 1 + (stacks * 0.01)
+				local boost = 1 + (stacks * 0.05)
 				moveSpeed = moveSpeed * boost
 				collectTimeMult = 1 / boost
 			end
@@ -1763,14 +1865,15 @@ function FishController.OnHeartbeat(dt)
 			end
 			
 			-- 3. Combat Mode Transitions
-			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
+			local currentTarget = _G.OrbitTargets and _G.OrbitTargets[tostring(numericIndex)] or _G.OrbitTarget
+			if currentTarget and currentTarget.Parent and currentTarget.PrimaryPart then
 				-- Drop other tasks like delivering/retreating to prioritize combat (excluding active conversion)
 				if state.State ~= S_CONVERT_TO_PLAYER and state.State ~= S_CONVERT_TO_SLOT and state.State ~= S_CONVERT_WAIT and state.State ~= S_ORBIT_ATTACK and state.State ~= S_CASTING_ABILITY then
 					state.State = S_ORBIT_ATTACK
 					state.Target = nil
 				end
 			else
-				if state.State == S_ORBIT_ATTACK or state.State == S_CASTING_ABILITY then
+				if state.State == S_ORBIT_ATTACK then
 					state.State = S_IDLE
 				end
 			end
@@ -1885,7 +1988,7 @@ function FishController.OnHeartbeat(dt)
 				local facePart = slotInstance and (slotInstance:FindFirstChild("FishFace") or slotInstance:FindFirstChildWhichIsA("BasePart"))
 				if facePart then
 					local facingCF = CFrame.lookAt(currentPos, currentPos + facePart.CFrame.LookVector)
-					model:SetPrimaryPartCFrame(facingCF)
+					model:PivotTo(facingCF)
 				end
 
 				-- Beams ON
@@ -1894,9 +1997,13 @@ function FishController.OnHeartbeat(dt)
 
 		-- DELIVERING: Fly back to player
 		elseif state.State == S_DELIVERING then
+			local localMax = (maxCapacity > 0 and maxCapacity) or 5
 			local dest = char.PrimaryPart.Position
 			local dist = (dest - currentPos).Magnitude
-			if dist < 4 then
+			if currentPlankton < localMax then
+				-- We suddenly have space again (e.g. algae was converted). Abort delivery!
+				state.State = S_IDLE
+			elseif dist < 4 then
 				state.State = S_IDLE
 			else
 				targetPos = dest
@@ -1955,8 +2062,19 @@ function FishController.OnHeartbeat(dt)
 			
 		-- ORBIT ATTACK: Hover around mob and attack with lunges
 		elseif state.State == S_ORBIT_ATTACK then
-			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
-				local mobRoot = _G.OrbitTarget.PrimaryPart
+			local intendedTarget = _G.OrbitTargets and _G.OrbitTargets[tostring(numericIndex)] or _G.OrbitTarget
+			
+			if not state.ActiveOrbitTarget or not state.ActiveOrbitTarget.Parent or not state.ActiveOrbitTarget.PrimaryPart then
+				state.ActiveOrbitTarget = intendedTarget
+				state.HasFinishedAttackForSwap = false
+			elseif state.ActiveOrbitTarget ~= intendedTarget and state.HasFinishedAttackForSwap then
+				state.ActiveOrbitTarget = intendedTarget
+				state.HasFinishedAttackForSwap = false
+			end
+			
+			local currentTarget = state.ActiveOrbitTarget
+			if currentTarget and currentTarget.Parent and currentTarget.PrimaryPart then
+				local mobRoot = currentTarget.PrimaryPart
 				local center = mobRoot.Position
 				
 				-- 1. Base hover position (above the mob and spread in a formation)
@@ -2052,6 +2170,7 @@ function FishController.OnHeartbeat(dt)
 					if u >= 1.0 then
 						-- Lunge finished!
 						state.IsLunging = false
+						state.HasFinishedAttackForSwap = true
 						targetPos = hoverPos
 					else
 						-- Curve math: J-curve hook trajectory
@@ -2094,21 +2213,84 @@ function FishController.OnHeartbeat(dt)
 				state.State = S_IDLE
 			end
 			
-		-- CASTING ABILITY: Fly to center of mob and trigger
+		-- CASTING ABILITY: Trigger at target location
 		elseif state.State == S_CASTING_ABILITY then
-			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
-				local targetPart = _G.OrbitTarget.PrimaryPart
-				local center = targetPart.Position
-				targetPos = center
-				
-				local dist = (center - model.PrimaryPart.Position).Magnitude
-				if dist < 4.0 then
-					-- We reached the center! Tell the client to perform the ability
-					state.AbilityReady = true
-					state.State = S_ORBIT_ATTACK -- Go back to orbiting after casting
+			local currentTarget = _G.OrbitTargets and _G.OrbitTargets[tostring(numericIndex)] or _G.OrbitTarget
+			
+			if not state.AbilityReefSpot then
+				if currentTarget and currentTarget.Parent and currentTarget.PrimaryPart then
+					-- Combat Mode: Spawn ability exactly at the mob's feet (floor level)
+					local mobRoot = currentTarget.PrimaryPart
+					local mobY = mobRoot.Position.Y
+					
+					local hum = currentTarget:FindFirstChildOfClass("Humanoid")
+					if hum then
+						mobY = mobY - hum.HipHeight - (mobRoot.Size.Y / 2)
+					else
+						mobY = mobY - (mobRoot.Size.Y / 2)
+					end
+					
+					local center = mobRoot.Position
+					state.AbilityReefSpot = Vector3.new(center.X + math.random(-15, 15), mobY, center.Z + math.random(-15, 15))
+				else
+					-- Non-Combat Mode: Fly to a random spot on the reef and trigger
+					local FieldConfig = require(game:GetService("ReplicatedStorage").Shared.ResourceConfig)
+					local closestField = nil
+					local closestDist = math.huge
+					local startPos = model.PrimaryPart.Position
+					
+					for fName, _ in pairs(FieldConfig.Fields) do
+						local fw = getFieldFolder(fName)
+						if fw then
+							local firstPart = fw:FindFirstChildWhichIsA("BasePart")
+							if firstPart then
+								local d = (startPos - firstPart.Position).Magnitude
+								if d < closestDist then
+									closestDist = d
+									closestField = fw
+								end
+							end
+						end
+					end
+					
+					if closestField then
+						local parts = closestField:GetChildren()
+						local validParts = {}
+						for _, p in ipairs(parts) do
+							if p:IsA("BasePart") and p:FindFirstChild("Capacity") then table.insert(validParts, p) end
+						end
+						if #validParts > 0 then
+							state.AbilityReefSpot = validParts[math.random(1, #validParts)].Position
+						end
+					end
+					
+					if not state.AbilityReefSpot then
+						-- Extreme fallback if literally no reef exists anywhere
+						state.AbilityReefSpot = model.PrimaryPart.Position - Vector3.new(0, 5, 0)
+					end
 				end
-			else
-				state.State = S_IDLE
+			end
+			
+			targetPos = state.AbilityReefSpot
+			
+			local dist = (state.AbilityReefSpot - model.PrimaryPart.Position).Magnitude
+			if dist < 4.0 then
+				-- We reached the spot! Tell the client to perform the ability
+				if not state.AbilityReefTriggered then
+					state.AbilityReady = true
+					state.AbilityReefTriggered = true
+				end
+				
+				-- Wait until the ability finishes executing
+				if state.AbilityReefTriggered and not state.AbilityReady and not state.AbilityToPerform and not state.PerformingAbility then
+					state.AbilityReefTriggered = nil
+					state.AbilityReefSpot = nil
+					if currentTarget and currentTarget.Parent and currentTarget.PrimaryPart then
+						state.State = S_ORBIT_ATTACK -- Go back to orbiting after casting
+					else
+						state.State = S_IDLE -- Go back to idle/gathering
+					end
+				end
 			end
 			
 		-- GATHERING: Munch munch
@@ -2125,7 +2307,12 @@ function FishController.OnHeartbeat(dt)
 					local localMax = (maxCapacity > 0 and maxCapacity) or 5
 					if currentPlankton < localMax then
 						FishHarvestEvent:FireServer(state.FishIndex, state.Target)
-						currentPlankton = currentPlankton + (state.Stats.GatherAmount or 1)
+						
+						-- Account for Instant Conversion so client doesn't artificially hit capacity early
+						local instConv = playerData and playerData.Stats and playerData.Stats.InstantConversion or 0
+						local gatherAmt = state.Stats.GatherAmount or 1
+						local toBackpack = gatherAmt * math.max(0, 1 - (instConv / 100))
+						currentPlankton = currentPlankton + toBackpack
 					end
 					
 					-- Rabbit Fish SFX: Collect (1/40)
@@ -2270,6 +2457,7 @@ function FishController.OnHeartbeat(dt)
 		-- Determine Destination (Point-to-Point System)
 		local isFormation = false
 		local isDirectMovement = false -- For conversion states that need straight-line movement
+		local currentTarget = _G.OrbitTargets and _G.OrbitTargets[tostring(numericIndex)] or _G.OrbitTarget
 		
 		-- PRIORITY 1: Direct point-to-point movement (conversion, gathering, etc.)
 		if targetPos then
@@ -2296,9 +2484,9 @@ function FishController.OnHeartbeat(dt)
 				)
 			end
 			destination = state.TankWanderTarget
-		elseif _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
+		elseif currentTarget and currentTarget.Parent and currentTarget.PrimaryPart then
 			-- ORBIT TARGET: Hover around a mob (combat)
-			local targetPart = _G.OrbitTarget.PrimaryPart
+			local targetPart = currentTarget.PrimaryPart
 			local center = targetPart.Position
 			local goldenAngle = 2.39996
 			local orbitRadius = 8 + (math.sqrt(numericIndex) * 1.5)
@@ -2381,8 +2569,9 @@ function FishController.OnHeartbeat(dt)
 			targetLookDir = SafeUnit(state.LungeHeading)
 		-- If in S_ORBIT_ATTACK and not lunging, point nose-down directly at the mob
 		elseif state.State == S_ORBIT_ATTACK and not state.IsLunging then
-			if _G.OrbitTarget and _G.OrbitTarget.Parent and _G.OrbitTarget.PrimaryPart then
-				local mobRoot = _G.OrbitTarget.PrimaryPart
+			local currentTarget = _G.OrbitTargets and _G.OrbitTargets[tostring(numericIndex)] or _G.OrbitTarget
+			if currentTarget and currentTarget.Parent and currentTarget.PrimaryPart then
+				local mobRoot = currentTarget.PrimaryPart
 				local toMob = (mobRoot.Position - finalNewPos)
 				if toMob.Magnitude > 0.1 then
 					targetLookDir = SafeUnit(toMob)
@@ -2455,7 +2644,7 @@ function FishController.OnHeartbeat(dt)
 			if facingCF then
 				-- Special case: If distance snap happened, apply immediately
 				if dist > 100 then
-					model:SetPrimaryPartCFrame(facingCF)
+					model:PivotTo(facingCF)
 					state.LastFacingDir = facingCF.LookVector
 				else
 					-- Smooth rotation while maintaining correct position
@@ -2464,7 +2653,7 @@ function FishController.OnHeartbeat(dt)
 					local smoothRot = currentRot:Lerp(targetRot, 0.2) -- Smoother turning
 					
 					-- Apply position + smoothed rotation
-					model:SetPrimaryPartCFrame(CFrame.new(finalNewPos) * smoothRot)
+					model:PivotTo(CFrame.new(finalNewPos) * smoothRot)
 				end
 			end
 		end

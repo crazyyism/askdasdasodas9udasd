@@ -21,6 +21,24 @@ MobSpawnConfig.Reefs = {
 			RespawnTime = 120,
 			SpawnAtPart = true
 		}
+	},
+	["Obsidian Reef"] = {
+		{
+			SpawnPartName = "SpawnLM",
+			Template = "LavaMonster",
+			Level = 5,
+			RespawnTime = 300,
+			SpawnAtPart = true
+		}
+	},
+	["Axolotl Reef"] = {
+		{
+			SpawnPartName = "AxolotlSpawn",
+			Template = "Axolotl",
+			Level = 5,
+			RespawnTime = 300,
+			SpawnAtPart = true
+		}
 	}
 }
 

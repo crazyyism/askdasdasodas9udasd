@@ -16,13 +16,16 @@ local GamepassService = require(script.GamepassService)
 local SecurityService = require(script.SecurityService)
 local SeaMineService = require(script.SeaMineService)
 local MobService = require(script.MobService)
+local WishingShrineService = require(script.WishingShrineService)
 local PhysicsService = game:GetService("PhysicsService")
 
--- Create collision group for players to disable player-player collision
+-- Create collision groups to disable unwanted physics interactions
 pcall(function()
 	PhysicsService:RegisterCollisionGroup("Players")
+	PhysicsService:RegisterCollisionGroup("Mobs")
 end)
 PhysicsService:CollisionGroupSetCollidable("Players", "Players", false)
+PhysicsService:CollisionGroupSetCollidable("Players", "Mobs", false)
 
 -- Disable auto loading characters so they only spawn when the loading screen finishes
 game:GetService("Players").CharacterAutoLoads = false
@@ -45,6 +48,7 @@ GamepassService.Start()
 SecurityService.Start()
 SeaMineService.Start()
 MobService.Start()
+WishingShrineService.Start()
 -- ShopService doesn't have a .Start() yet but it connects OnServerEvent on requirement
 
 
@@ -54,16 +58,34 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 
 local function getFieldFolder(fieldName)
 	if not fieldName then return nil end
+	
 	local folder = workspace:FindFirstChild(fieldName)
 	if folder then return folder end
 	
+	local reefsFolder = workspace:FindFirstChild("Reefs")
+	if reefsFolder then
+		folder = reefsFolder:FindFirstChild(fieldName)
+		if folder then return folder end
+	end
+	
 	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	
 	for _, child in ipairs(workspace:GetChildren()) do
 		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
 		if childClean == cleanName then
 			return child
 		end
 	end
+	
+	if reefsFolder then
+		for _, child in ipairs(reefsFolder:GetChildren()) do
+			local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+			if childClean == cleanName then
+				return child
+			end
+		end
+	end
+	
 	return nil
 end
 
@@ -136,7 +158,6 @@ end)
 
 AbilityActivation.OnServerEvent:Connect(function(player, abilityName)
 	if abilityName == "RainmakerUltimate" then
-		AbilityService.IncrementAbilitiesCommitted(player)
 		
 		-- Check if Bullet Blessing is already active
 		local FishConfig = require(ReplicatedStorage.Shared.FishConfig)
@@ -223,7 +244,8 @@ AbilityActivation.OnServerEvent:Connect(function(player, abilityName)
 				local megaCritPower = (pd and pd.Stats and pd.Stats.MegaCritPower) or 10.0
 				
 				local isCrit = false
-				local finalDamage = 50 * playerAttack
+				local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+				local finalDamage = (ToolConfig["Rainmaker"].AbilityDamage or 50) * playerAttack
 				
 				if math.random() <= megaCritChance then
 					isCrit = true
@@ -234,6 +256,10 @@ AbilityActivation.OnServerEvent:Connect(function(player, abilityName)
 				end
 				
 				local avgLevel = MobService.GetAverageFishLevel(player)
+				
+				if pd and pd.Settings and pd.Settings.HitboxVisualizer then
+					VFXReplication:FireClient(player, "HitboxVisualizer", nil, nil, {Shape = "Box", Size = boxSize, CFrame = boxCFrame, Duration = 0.5})
+				end
 				
 				for _, mobData in ipairs(MobService.GetMobs()) do
 					if mobData.Mob and mobData.Mob.PrimaryPart then
@@ -279,51 +305,31 @@ GuardianRequest.OnServerEvent:Connect(function(player, movetype)
 	-- Replicate VFX to all clients
 	VFXReplication:FireAllClients("GuardianVFX", player, nil, hrp, movetype)
 	
-	-- Gameplay Logic: Harvest after tween delay
+	-- Gameplay Logic
 	if movetype == "main" then
-		task.delay(0.6, function()
-			if not player or not player.Character or not player.Character.PrimaryPart then return end
-			
-			-- Strictly in front: Offset center by half the box depth (50)
-			local boxDepth = 100
-			local targetCF = player.Character.PrimaryPart.CFrame * CFrame.new(0, 0, -boxDepth/2) 
-			local size = Vector3.new(50, 50, boxDepth) 
-			
-			local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
-			local overlapParams = OverlapParams.new()
-			overlapParams.FilterType = Enum.RaycastFilterType.Include
-			local filterFolders = {}
-			for fieldName, _ in pairs(ResourceConfig.Fields) do
-				local f = getFieldFolder(fieldName)
-				if f then table.insert(filterFolders, f) end
-			end
-			overlapParams.FilterDescendantsInstances = filterFolders
-			
-			local parts = workspace:GetPartBoundsInBox(targetCF, size, overlapParams)
-			local algaeTargets = {}
-			for _, p in ipairs(parts) do
-				if p:IsA("BasePart") then
-					local capacity = p:FindFirstChild("Capacity")
-					if capacity and capacity.Value > 0 then
-						table.insert(algaeTargets, p)
-					end
-				end
-			end
-			
-			if #algaeTargets > 0 then
-				-- Large batch harvest: 50 base algae per target (affected by mults)
-				HarvestService.HarvestMultipleBatched(player, algaeTargets, 50, true)
-			end
-		end)
+		local AbilityService = require(script.AbilityService)
+		AbilityService.TriggerGuardianCall(player, hrp, 0) -- 0 damage for the admin manual call
 	end
 end)
 
 print("Fish Hatchery Simulator Server Loaded.")
 
 -- Admin Commands
-local AllowedUsers = {["Crazyyism"] = true, ["Player1"] = true, ["Player2"] = true, ["EllabellTheLolGirl"] = true}
+local AllowedUsers = {["Crazyyism"] = true, ["Player1"] = true, ["Player2"] = true, ["EllabellTheLolGirl"] = true, ["Aaaronip"] = true}
 local BadgeService = game:GetService("BadgeService")
 local WELCOME_BADGE_ID = 2305187807978897
+
+local TextChatService = game:GetService("TextChatService")
+pcall(function()
+	if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+		TextChatService.ShouldDeliverCallback = function(textChatMessage, targetTextSource)
+			if textChatMessage.Text and textChatMessage.Text:sub(1, 1) == "/" then
+				return false
+			end
+			return true
+		end
+	end
+end)
 
 game:GetService("Players").PlayerAdded:Connect(function(player)
 	-- Tutorial Safety Check: Reset orphaned aquarium claims if player hasn't completed the tutorial
@@ -536,28 +542,44 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 				end
 			end)
 		elseif msg:lower() == "/testcapacity" and AllowedUsers[player.Name] then
-			PlayerData.update(player, function(data)
-				if not data.Stats then data.Stats = {} end
-				-- Set MaxCapacity directly — RecalculateStats resets CapacityMultiplier
-				-- to 1.0 at startup so we bypass it entirely for this debug command.
-				data.MaxCapacity = math.huge
-				data._InfiniteCapacity = true
+			local currentState = player:GetAttribute("InfiniteCapacity") or false
+			player:SetAttribute("InfiniteCapacity", not currentState)
+			
+			if not currentState then
+				AbilityService.ApplyBuff(player, "InfiniteCapacity")
 				print(player.Name .. " enabled infinite capacity.")
-				return data
-			end)
+			else
+				AbilityService.RemoveBuff(player, "InfiniteCapacity")
+				print(player.Name .. " disabled infinite capacity.")
+			end
 		elseif msg:lower() == "/default" and AllowedUsers[player.Name] then
+			player:SetAttribute("InfiniteCapacity", false)
+			player:SetAttribute("InstantFire", false)
+			AbilityService.RemoveBuff(player, "InfiniteCapacity")
+			AbilityService.RemoveBuff(player, "InstantFire")
+			
 			PlayerData.update(player, function(data)
 				if not data.Stats then data.Stats = {} end
-				data._InfiniteCapacity = nil
 				-- Recalculate properly from backpack/artifacts
 				PlayerData.RecalculateStats(data)
-				print(player.Name .. " reset capacity.")
+				print(player.Name .. " reset default stats.")
 				return data
 			end)
 		elseif msg:lower() == "/cooldowns" and AllowedUsers[player.Name] then
 			local currentState = player:GetAttribute("NoCooldowns") or false
 			player:SetAttribute("NoCooldowns", not currentState)
 			print(player.Name .. " toggled ability cooldowns: " .. tostring(not currentState))
+		elseif msg:lower() == "/instantfire" and AllowedUsers[player.Name] then
+			local currentState = player:GetAttribute("InstantFire") or false
+			player:SetAttribute("InstantFire", not currentState)
+			
+			if not currentState then
+				AbilityService.ApplyBuff(player, "InstantFire")
+				print(player.Name .. " enabled instant fire.")
+			else
+				AbilityService.RemoveBuff(player, "InstantFire")
+				print(player.Name .. " disabled instant fire.")
+			end
 		elseif msg:sub(1, 13):lower() == "/setaquarium " and AllowedUsers[player.Name] then
 			local arg = msg:sub(14)
 			-- Trim whitespace check?
@@ -651,7 +673,13 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 			for i = 1, 200 do
 				AbilityService.ApplyBuff(targetPlayer, "RhythmFever")
 			end
-			print(player.Name .. " granted 200 Rhythm Fever stacks to " .. targetPlayer.Name)
+			
+			local moonStacks = AbilityService.GetBuffStacks(targetPlayer, "ToTheMoon")
+			if moonStacks == 0 then
+				AbilityService.TriggerToTheMoon(targetPlayer)
+			end
+			
+			print(player.Name .. " granted 200 Rhythm Fever stacks and activated To The Moon for " .. targetPlayer.Name)
 		elseif msg:lower():sub(1, 11) == "/reefboost " and AllowedUsers[player.Name] then
 			local argStr = msg:sub(12)
 			local args = argStr:split(" ")
@@ -732,12 +760,10 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 						else
 							-- Check Equipment Config (Eggs/Items)
 							local EquipmentConfig = require(ReplicatedStorage.Shared.EquipmentConfig)
-							if EquipmentConfig.Eggs then
-								for key, _ in pairs(EquipmentConfig.Eggs) do
-									if key:lower() == itemNameQuery then
-										properItemName = key
-										break
-									end
+							for key, _ in pairs(EquipmentConfig) do
+								if type(key) == "string" and key:lower() == itemNameQuery then
+									properItemName = key
+									break
 								end
 							end
 						end

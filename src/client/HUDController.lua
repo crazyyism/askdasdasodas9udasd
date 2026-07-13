@@ -288,15 +288,17 @@ function HUDController.Start()
                 local statsFrame = findFrame("StatisticsFrame")
                 local questFrame = findFrame("QuestFrame")
                 local indexFrame = findFrame("IndexFrame")
+                local robuxFrame = findFrame("RobuxFrame")
                 
-                print("[HUD DEBUG] Found frames:", invFrame ~= nil, statsFrame ~= nil, questFrame ~= nil, indexFrame ~= nil)
+                print("[HUD DEBUG] Found frames:", invFrame ~= nil, statsFrame ~= nil, questFrame ~= nil, indexFrame ~= nil, robuxFrame ~= nil)
                 
                 local invBtn = btnHolders:FindFirstChild("Inventory")
                 local statsBtn = btnHolders:FindFirstChild("Statistics")
                 local questBtn = btnHolders:FindFirstChild("quests") or btnHolders:FindFirstChild("Quests") or btnHolders:FindFirstChild("Quest")
                 local indexBtn = btnHolders:FindFirstChild("Index")
+                local robuxBtn = btnHolders:FindFirstChild("RobuxShop")
                 
-                print("[HUD DEBUG] Found buttons:", invBtn ~= nil, statsBtn ~= nil, questBtn ~= nil, indexBtn ~= nil)
+                print("[HUD DEBUG] Found buttons:", invBtn ~= nil, statsBtn ~= nil, questBtn ~= nil, indexBtn ~= nil, robuxBtn ~= nil)
                 
                 -- Note: Active Frame state resets on Rebind (UI is usually closed on reset anyway)
                 HUDController.ActiveFrame = nil 
@@ -320,6 +322,7 @@ function HUDController.Start()
                 storePos(questFrame)
                 storePos(statsFrame)
                 storePos(indexFrame)
+                storePos(robuxFrame)
                 
                 local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
                 
@@ -357,6 +360,8 @@ function HUDController.Start()
                              TweenService:Create(questFrame, tweenInfo, {Position = hiddenPositions[questFrame]}):Play()
                         elseif HUDController.ActiveFrame == "Index" and indexFrame then
                              TweenService:Create(indexFrame, tweenInfo, {Position = hiddenPositions[indexFrame]}):Play()
+                        elseif HUDController.ActiveFrame == "RobuxShop" and robuxFrame then
+                             TweenService:Create(robuxFrame, tweenInfo, {Position = hiddenPositions[robuxFrame]}):Play()
                         end
                         
                         -- Open new
@@ -394,6 +399,14 @@ function HUDController.Start()
                       statsBtn.MouseButton1Click:Connect(function()
                           print("[HUD DEBUG] Clicked Statistics")
                           HUDController.ToggleFrame("Statistics", statsFrame)
+                     end)
+                end
+                
+                if robuxBtn and robuxFrame then
+                      print("[HUD DEBUG] Connected RobuxShop button.")
+                      robuxBtn.MouseButton1Click:Connect(function()
+                          print("[HUD DEBUG] Clicked RobuxShop")
+                          HUDController.ToggleFrame("RobuxShop", robuxFrame)
                      end)
                 end
                 
@@ -475,7 +488,7 @@ function HUDController.Start()
 								local finalCF = CFrame.new(0, 0, 0) * currentRotation * desiredOffset
 								
 								if m.PrimaryPart then
-									m:SetPrimaryPartCFrame(finalCF)
+									m:PivotTo(finalCF)
 								else
 									m:PivotTo(finalCF)
 								end
@@ -558,7 +571,7 @@ function HUDController.Start()
 									local offsetCF = CFrame.new(dx, dy, dz) * CFrame.Angles(swayX, 0, swayZ)
 									
 									if m.PrimaryPart then
-										m:SetPrimaryPartCFrame(finalCF * offsetCF)
+										m:PivotTo(finalCF * offsetCF)
 									else
 										m:PivotTo(finalCF * offsetCF)
 									end

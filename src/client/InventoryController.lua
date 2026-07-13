@@ -133,9 +133,23 @@ function InventoryController.Refresh(container, template, inventoryList)
 		counts["Pearl"] = InventoryController.PlayerData.Pearls
 	end
 	
+	-- Sort keys alphabetically
+	local sortedKeys = {}
+	for itemId, _ in pairs(counts) do
+		table.insert(sortedKeys, itemId)
+	end
+	table.sort(sortedKeys, function(a, b)
+		local cfgA = EquipmentConfig[a]
+		local cfgB = EquipmentConfig[b]
+		local nameA = (cfgA and (cfgA.DisplayName or cfgA.Name)) or a
+		local nameB = (cfgB and (cfgB.DisplayName or cfgB.Name)) or b
+		return tostring(nameA):lower() < tostring(nameB):lower()
+	end)
+	
 	-- Create UI
-	for itemId, count in pairs(counts) do
-		local config = EquipmentConfig.Eggs[itemId] 
+	for _, itemId in ipairs(sortedKeys) do
+		local count = counts[itemId]
+		local config = EquipmentConfig[itemId] 
 		
 		if config then
 			local card = template:Clone()
@@ -214,7 +228,7 @@ end
 function InventoryController.StartDrag(itemName, sourceIcon)
 	local FishConfig = require(ReplicatedStorage.Shared.FishConfig)
 	local EquipmentConfig = require(ReplicatedStorage.Shared.EquipmentConfig)
-	local config = EquipmentConfig.Eggs[itemName]
+	local config = EquipmentConfig[itemName]
 	
 	dragging = {
 		Name = itemName,
@@ -591,7 +605,7 @@ function InventoryController.EndDrag(input)
 				local success, res, consumedCount = ProcessEggDrop:InvokeServer(aquarium, itemName, targetNumericId, feedCount)
 				
 				if success then
-					local itemCfg = EquipmentConfig.Eggs[itemName]
+					local itemCfg = EquipmentConfig[itemName]
 					local isEviction = itemCfg and itemCfg.IsEviction
 					local finalConsumed = consumedCount or feedCount
 					
@@ -720,7 +734,7 @@ function InventoryController.ShowHatchedUI(fishData, lastItemName, lastSlotId, l
 	local youGotFrame = hatchFrame:FindFirstChild("YouGotFrame")
 	local youGotText = youGotFrame and youGotFrame:FindFirstChild("YouGotText")
 	
-	local itemCfg = EquipmentConfig.Eggs[lastItemName]
+	local itemCfg = EquipmentConfig[lastItemName]
 	local isFeed = itemCfg and itemCfg.IsFeed
 
 	if youGotText then
@@ -816,7 +830,7 @@ function InventoryController.ShowHatchedUI(fishData, lastItemName, lastSlotId, l
 			local finalCF = CFrame.new(0, 0, 0) * currentRotation * desiredOffset
 			
 			if model.PrimaryPart then
-				model:SetPrimaryPartCFrame(finalCF)
+				model:PivotTo(finalCF)
 			else
 				model:PivotTo(finalCF)
 			end
@@ -952,7 +966,7 @@ function InventoryController.ShowHatchedUI(fishData, lastItemName, lastSlotId, l
 							-- Notification for consumed amount and from-to fish
 							local settings = InventoryController.PlayerData and InventoryController.PlayerData.Settings or {}
 							local hasOptionOn = settings.UntilLegendary or settings.UntilMythic
-							local itemCfg = EquipmentConfig.Eggs[lastItemName]
+							local itemCfg = EquipmentConfig[lastItemName]
 							local isFeed = itemCfg and itemCfg.IsFeed
 							
 							if (hasOptionOn or finalConsumed > 1) and not isFeed then

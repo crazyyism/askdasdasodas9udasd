@@ -55,6 +55,8 @@ local ToolConfig = {
 		Cooldown = 0.04,
 		HarvestRadius = 25,
 		HasAbility = true,
+		MobDamage = 5,
+		AbilityDamage = 250,
 		Pattern = {
 			{0, 0},
 		},
@@ -64,6 +66,7 @@ local ToolConfig = {
 		CapacityBurn = 6,
 		Cooldown = 1.5,
 		HarvestRadius = 14,
+		MobDamage = 30,
 		Pattern = {}, -- Ignored due to HarvestRadius
 	},
 
@@ -71,6 +74,7 @@ local ToolConfig = {
 		DisplayName = "Poseidon",
 		CapacityBurn = 4,
 		Cooldown = .6,
+		MobDamage = 7,
 		Pattern = {
 			{0, 0}, {0, 1}, {0, 2}, {0,3}, {1,0}, {-1,0}, {2,0}, {-2,0}, {-2,1}, {2,1}, {2,2}, {-2,2}, {2,3}, {-2,3}
 		},
@@ -80,6 +84,11 @@ local ToolConfig = {
 		HasAbility = true,
 		CapacityBurn = 10,
 		Cooldown = .1,
+		MobDamage = 20,
+		AbilityDamage = 50,
+		OrbTickDamage = 10,
+		ExplosionDamage = 2,
+		SunWrathInitialDamage = 400,
 		Pattern = {
 			{-1,1}, {0,1}, {1,1}, {2,1},
 			{-1,2}, {0,2}, {1,2}, {2,2},
@@ -115,6 +124,7 @@ local ToolConfig = {
 		Cooldown = 1,
 		ShurikenLifetime = .8,
 		ShurikenRange = 13,
+		MobDamage = 5,
 		Pattern = {},
 	},
 	["Eviction"] = {
@@ -132,7 +142,7 @@ local ToolConfig = {
 }
 
 ToolConfig["SunkissedArt"] = ToolConfig["Sunkissed Art"]
-ToolConfig["SharkScythe"] = ToolConfig["Shark Scythe"]
+ToolConfig["Shark Scythe"] = ToolConfig["SharkScythe"]
 ToolConfig["Stone Hammer"] = ToolConfig["StoneHammer"]
 
 return ToolConfig

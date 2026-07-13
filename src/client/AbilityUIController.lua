@@ -93,8 +93,14 @@ function AbilityUIController.Start()
 		if not buffBar then SetupUI() end
 		
 		if stacks > 0 then
-			if not expiresAt then expiresAt = os.time() + 10 end
-			activeBuffs[buffName] = {Stacks = stacks, ExpiresAt = expiresAt}
+			local noExpire = false
+			if expiresAt == 0 then
+				noExpire = true
+			elseif not expiresAt then 
+				expiresAt = os.time() + 10 
+			end
+			
+			activeBuffs[buffName] = {Stacks = stacks, ExpiresAt = expiresAt, NoExpire = noExpire}
 			if buffBar and abilityTemplate then
 				UpdateBuffDisplay(buffBar, abilityTemplate, buffDescription, buffName)
 			end
@@ -192,7 +198,7 @@ function AbilityUIController.Start()
 					local exp = buffData.ExpiresAt or currentTime
 					local timeRemaining = exp - currentTime
 					-- Remove buff if expired
-					if timeRemaining <= 0 then
+					if not buffData.NoExpire and timeRemaining <= 0 then
 						activeBuffs[buffName] = nil
 						RemoveBuffDisplay(buffBar, buffName)
 					else
@@ -214,7 +220,12 @@ function AbilityUIController.Start()
 								-- Vertical Progress Bar (Fills from Bottom)
 								progress.AnchorPoint = Vector2.new(0, 1)
 								progress.Position = UDim2.new(0, 0, 1, 0)
-								progress.Size = UDim2.new(1, 0, progressPercent, 0)
+								
+								if buffData.NoExpire then
+									progress.Size = UDim2.new(1, 0, 1, 0)
+								else
+									progress.Size = UDim2.new(1, 0, progressPercent, 0)
+								end
 							end
 						end
 					end
@@ -377,7 +388,7 @@ function AbilityUIController.Start()
 						end
 					end
 					if timer_field then
-						if buffData and buffData.Permanent then
+						if buffData and (buffData.Permanent or buffData.NoExpire) then
 							timer_field.Visible = false
 						elseif buffData then
 							timer_field.Visible = true
@@ -410,6 +421,12 @@ function AbilityUIController.Start()
 end
 
 function GetAbilityConfigByName(abilityName)
+	if FishConfig.Buffs and FishConfig.Buffs[abilityName] then
+		local cfg = FishConfig.Buffs[abilityName]
+		if not cfg.Name then cfg.Name = abilityName end
+		return cfg
+	end
+
 	if type(abilityName) == "string" and abilityName:match(" Boost$") and abilityName:match("Reef") then
 		local reefName = abilityName:gsub(" Boost$", "")
 		return {
@@ -420,12 +437,6 @@ function GetAbilityConfigByName(abilityName)
 			Duration = 600, -- 10 minutes
 			Image = "rbxassetid://137465296316335" -- Orange boost placeholder image
 		}
-	end
-
-	if FishConfig.Buffs and FishConfig.Buffs[abilityName] then
-		local cfg = FishConfig.Buffs[abilityName]
-		if not cfg.Name then cfg.Name = abilityName end
-		return cfg
 	end
 
 	if EquipmentConfig[abilityName] then

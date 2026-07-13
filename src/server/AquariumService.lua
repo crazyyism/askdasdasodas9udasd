@@ -128,7 +128,7 @@ function AquariumService.Start()
 		
 		PlayerData.update(player, function(data)
 			local currentLevel = data.AquariumLevel or 0
-			local cost = 2500 * math.pow(2, currentLevel)
+			local cost = math.floor(2500 * math.pow(3, currentLevel))
 			
 			if (data.Biomass or 0) < cost then
 				msg = "Not enough Biomass! Need " .. cost
@@ -174,6 +174,10 @@ function AquariumService.Start()
 				local fishCount = 0
 				for _, _ in pairs(data.FishSchool or {}) do fishCount = fishCount + 1 end
 				QuestConfig.UpdateNoobieTurtle(data.NoobieTurtleQuestsCompleted or 0, fishCount, player.UserId)
+			elseif questId == "ElderTurtle" then
+				local fishCount = 0
+				for _, _ in pairs(data.FishSchool or {}) do fishCount = fishCount + 1 end
+				QuestConfig.UpdateElderTurtle(data.ElderTurtleQuestsCompleted or 0, fishCount, player.UserId)
 			end
 			
 			if data.ActiveQuests and data.ActiveQuests[questId] then
@@ -226,6 +230,10 @@ function AquariumService.Start()
 				local fishCount = 0
 				for _, _ in pairs(data.FishSchool or {}) do fishCount = fishCount + 1 end
 				qCfg = QuestConfig.UpdateNoobieTurtle(data.NoobieTurtleQuestsCompleted or 0, fishCount, player.UserId, prog)
+			elseif questId == "ElderTurtle" then
+				local fishCount = 0
+				for _, _ in pairs(data.FishSchool or {}) do fishCount = fishCount + 1 end
+				qCfg = QuestConfig.UpdateElderTurtle(data.ElderTurtleQuestsCompleted or 0, fishCount, player.UserId, prog)
 			else
 				qCfg = QuestConfig.Quests[questId]
 			end
@@ -237,7 +245,7 @@ function AquariumService.Start()
 				-- if there are real progress-tracked goals that require it.
 				local hasProgressGoals = false
 				for res in pairs(qCfg.Goals) do
-					if res ~= "AbilitiesCommitted" and res ~= "SeaMinesPopped" and res ~= "TokensGathered" and res ~= "BiomassTokensGathered" and res ~= "EquipmentsPurchased" and res ~= "MaxAlgaePerSecond" and res ~= "FishRequired" then
+					if res ~= "AbilitiesCommitted" and not string.find(res, "SeaMinesPopped") and res ~= "TokensGathered" and res ~= "BiomassTokensGathered" and res ~= "EquipmentsPurchased" and res ~= "MaxAlgaePerSecond" and res ~= "FishRequired" then
 						hasProgressGoals = true
 						break
 					end
@@ -246,7 +254,7 @@ function AquariumService.Start()
 				local safeProgress = (type(prog) == "table") and prog or {}
 				for res, goal in pairs(qCfg.Goals) do
 					local current
-					if res == "AbilitiesCommitted" or res == "SeaMinesPopped" or res == "TokensGathered" or res == "BiomassTokensGathered" or res == "EquipmentsPurchased" or res == "MaxAlgaePerSecond" then current = data[res] or 0 elseif res == "FishRequired" then local c=0; for _,_ in pairs(data.FishSchool or {}) do c=c+1 end; current = c else current = safeProgress[res] or 0 end
+					if res == "AbilitiesCommitted" or string.find(res, "SeaMinesPopped") or res == "TokensGathered" or res == "BiomassTokensGathered" or res == "EquipmentsPurchased" or res == "MaxAlgaePerSecond" then current = data[res] or 0 elseif res == "FishRequired" then local c=0; for _,_ in pairs(data.FishSchool or {}) do c=c+1 end; current = c else current = safeProgress[res] or 0 end
 					
 					if current < goal then return nil end
 				end
@@ -304,6 +312,12 @@ function AquariumService.Start()
 					-- Store for notification outside the update callback
 					data._PendingSeaMinesNotification = minesToGive
 				end
+
+			elseif questId == "ElderTurtle" then
+				local prevCount = data.ElderTurtleQuestsCompleted or 0
+				local newCount = prevCount + 1
+				data.ElderTurtleQuestsCompleted = newCount
+				data._QuestsDirty = true
 
 			elseif string.sub(questId, 1, 4) == "Lava" then
 				-- If it's a Lava Turtle Quest
@@ -382,9 +396,11 @@ function AquariumService.Start()
 			if decal then
 				local success, err = pcall(function()
 					-- Force refresh by setting to blank first (fixes Roblox asset loading issue)
-					decal.Texture = ""
-					task.wait(0.05)
-					decal.Texture = fishCfg.DecalId or ""
+					task.spawn(function()
+						decal.Texture = ""
+						task.wait(0.05)
+						decal.Texture = fishCfg.DecalId or ""
+					end)
 				end)
 				if not success then
 					warn("AquariumService: Failed to set decal texture:", err)
@@ -489,7 +505,7 @@ function AquariumService.Start()
 		-- 2. Transaction
 		PlayerData.update(player, function(data)
 			-- Validate egg config FIRST (before consuming anything)
-			local eggCfg = EquipmentConfig.Eggs[eggName]
+			local eggCfg = EquipmentConfig[eggName]
 			if not eggCfg then
 				msg = "This item cannot be placed in an aquarium slot!"
 				return nil
@@ -666,6 +682,12 @@ function AquariumService.Start()
 				
 				newFish = lastRolledFish
 				finalConsumedCount = consumedCount
+				
+				-- Track Quest Progress
+				if finalConsumedCount > 0 then
+					PlayerData.IncrementQuestGoal(player, "EggsHatched", finalConsumedCount)
+				end
+				
 				data._FishDirty = true
 				data._QuestsDirty = true
 			else
@@ -830,9 +852,8 @@ function AquariumService.Start()
 
 	DropConsumable.OnServerInvoke = function(player, itemName)
 		if not SecurityService.ValidateRemoteCall(player, "DropConsumable") then return false, "Security Check Failed" end
-		
-		local EquipmentConfig = require(ReplicatedStorage.Shared.EquipmentConfig)
-		local config = EquipmentConfig.Eggs[itemName]
+		local EquipmentConfig = require(game:GetService("ReplicatedStorage").Shared.EquipmentConfig)
+		local config = EquipmentConfig[itemName]
 		if not config or not config.IsConsumable then
 			return false, "Invalid consumable"
 		end
@@ -856,23 +877,22 @@ function AquariumService.Start()
 
 			local function GetClosestReef(pos)
 				local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
-				local closest = nil
-				local minD = math.huge
 				for rName, _ in pairs(ResourceConfig.Fields) do
-					local f = workspace:FindFirstChild(rName)
+					local f = workspace:FindFirstChild("Reefs") and workspace.Reefs:FindFirstChild(rName)
 					if f then
-						for _, child in ipairs(f:GetChildren()) do
-							if child:IsA("BasePart") then
-								local dist = (child.Position - pos).Magnitude
-								if dist < minD then
-									minD = dist
-									closest = rName
-								end
+						local hitbox = f:FindFirstChild("Hitbox")
+						if hitbox then
+							local dx = pos.X - hitbox.Position.X
+							local dz = pos.Z - hitbox.Position.Z
+							local distXZ = math.sqrt(dx*dx + dz*dz)
+							local radius = math.max(hitbox.Size.X, hitbox.Size.Z) / 2
+							if distXZ <= radius and math.abs(pos.Y - hitbox.Position.Y) <= (hitbox.Size.Y / 2 + 100) then
+								return rName
 							end
 						end
 					end
 				end
-				return minD <= 50 and closest or nil
+				return nil
 			end
 
 			local reefName = nil
@@ -922,14 +942,14 @@ function AquariumService.Start()
 				local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
 				
 				local EquipmentConfig = require(game:GetService("ReplicatedStorage").Shared.EquipmentConfig)
-				local cfg = EquipmentConfig[itemName] or (EquipmentConfig.Eggs and EquipmentConfig.Eggs[itemName])
+				local cfg = EquipmentConfig[itemName]
 				local baseYieldMult = cfg and cfg.BaseYieldMultiplier or 1.0
 				
 				for typeName, amt in pairs(data.Plankton) do
 					if amt > 0 then
 						local resType = ResourceConfig.Types[typeName]
 						local resBaseValue = resType and resType.BaseValue or 1
-						gained += (amt * resBaseValue * (data.Stats and data.Stats.BiomassPerAlgae or 1.0) * yieldMult * convertMult * baseYieldMult)
+						gained += (amt * resBaseValue * (data.Stats and data.Stats.BiomassPerAlgae or 1.0) * yieldMult * baseYieldMult)
 					end
 				end
 				
@@ -963,7 +983,7 @@ function AquariumService.Start()
 				data._InventoryDirty = true
 				
 				local EquipmentConfig = require(game:GetService("ReplicatedStorage").Shared.EquipmentConfig)
-				local cfg = EquipmentConfig[itemName] or (EquipmentConfig.Eggs and EquipmentConfig.Eggs[itemName])
+				local cfg = EquipmentConfig[itemName]
 				local duration = cfg and cfg.Duration or 600
 				local multiplier = cfg and cfg.Multiplier or 2.0
 				
@@ -995,6 +1015,34 @@ function AquariumService.Start()
 					NotificationEvent:FireClient(player, "Used " .. itemName .. "!", Color3.fromRGB(200, 200, 255))
 				end
 				success = true
+			elseif itemName == "Remote Warp" then
+				local ownedAquarium = PlayerAquarium[player]
+				if not ownedAquarium then
+					msg = "You don't own an aquarium!"
+					return nil
+				end
+				
+				local respawnPoint = ownedAquarium:FindFirstChild("OwnerSpawn")
+				if not respawnPoint then
+					msg = "Aquarium spawn point not found!"
+					return nil
+				end
+				
+				data.Inventory[itemName] = data.Inventory[itemName] - 1
+				if data.Inventory[itemName] <= 0 then data.Inventory[itemName] = nil end
+				data._InventoryDirty = true
+				
+				data._PendingWarpPos = respawnPoint.Position + Vector3.new(0, 5, 0)
+				
+				success = true
+			elseif itemName == "Skull" then
+				data.Inventory[itemName] = data.Inventory[itemName] - 1
+				if data.Inventory[itemName] <= 0 then data.Inventory[itemName] = nil end
+				data._InventoryDirty = true
+				
+				data._PendingSkullSpawns = 15
+				
+				success = true
 			end
 
 			return data
@@ -1020,6 +1068,75 @@ function AquariumService.Start()
 					d._PendingGemBuff = nil
 					return d
 				end, true)
+			end
+			
+			if afterData and afterData._PendingWarpPos then
+				local warpPos = afterData._PendingWarpPos
+				local character = player.Character
+				if character and character:FindFirstChild("HumanoidRootPart") then
+					character.HumanoidRootPart.CFrame = CFrame.new(warpPos)
+					local NotificationEvent = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("NotificationEvent")
+					if NotificationEvent then
+						NotificationEvent:FireClient(player, "Warped to your Aquarium!", Color3.fromRGB(150, 150, 255))
+					end
+				end
+				
+				-- Clear pending warp
+				PlayerData.update(player, function(d)
+					d._PendingWarpPos = nil
+					return d
+				end, true)
+			end
+			
+			if afterData and afterData._PendingSkullSpawns then
+				local count = afterData._PendingSkullSpawns
+				
+				PlayerData.update(player, function(d)
+					d._PendingSkullSpawns = nil
+					return d
+				end, true)
+				
+				local HttpService = game:GetService("HttpService")
+				if not _G.TemporaryFish then _G.TemporaryFish = {} end
+				if not _G.TemporaryFish[player.UserId] then _G.TemporaryFish[player.UserId] = {} end
+				
+				local possibleFish = {"Basic Fish", "Diver Fish", "Zombie Fish", "Puppeteer Fish"}
+				local packet = {OwnerUserId = player.UserId, __IsTemporary = true}
+				local numSpawned = 0
+				
+				for i = 1, count do
+					local targetId = possibleFish[math.random(1, #possibleFish)]
+					local cloneIndex = 1000 + math.random(1, 9999)
+					while (_G.TemporaryFish[player.UserId][tostring(cloneIndex)] or (afterData.FishSchool and afterData.FishSchool[tostring(cloneIndex)])) do
+						cloneIndex += 1
+					end
+					
+					local cloneData = {
+						Id = targetId,
+						UniqueId = HttpService:GenerateGUID(false),
+						IsTemporary = true,
+						ExpiresAt = os.time() + 600,
+						VisualOverride = {
+							Color = Color3.fromRGB(0, 255, 255),
+							Transparency = 0.5,
+							Material = Enum.Material.Neon
+						}
+					}
+					
+					_G.TemporaryFish[player.UserId][tostring(cloneIndex)] = cloneData
+					packet[tostring(cloneIndex)] = cloneData
+					numSpawned += 1
+				end
+				
+				local FishReplicationEvent = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("FishReplicationEvent")
+				if FishReplicationEvent and numSpawned > 0 then
+					FishReplicationEvent:FireAllClients(packet)
+				end
+				
+				local NotificationEvent = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("NotificationEvent")
+				if NotificationEvent then
+					NotificationEvent:FireClient(player, "Summoned 15 Ghost Fish for 10 Minutes!", Color3.fromRGB(0, 255, 255))
+				end
 			end
 		end
 
@@ -1113,4 +1230,5 @@ function AquariumService.Start()
 end
 
 return AquariumService
+
 

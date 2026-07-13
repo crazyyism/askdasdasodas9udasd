@@ -24,6 +24,13 @@ local TOOL_ANIMS = {
 	}
 }
 
+-- Customize your default player animations here!
+-- Leave as "" or "rbxassetid://0" to use the standard Roblox animations.
+local DEFAULT_PLAYER_ANIMS = {
+	Walk = "rbxassetid://0",
+	Idle = "rbxassetid://116536081429516"
+}
+
 local DEFAULT_TOOL_ID = "rbxassetid://507768375" -- Standard Right Arm Up
 
 local currentOverride = nil
@@ -110,11 +117,17 @@ end
 
 local function applyAnimation(char, toolName)
 	if isSuspended then return end
-	local hum = char:FindFirstChild("Humanoid")
-	local animator = hum and hum:FindFirstChild("Animator")
-	if not hum or not animator then return end
+	
+	task.spawn(function()
+		local hum = char:WaitForChild("Humanoid", 3)
+		if not hum then return end
+		local animator = hum:WaitForChild("Animator", 3)
+		if not animator then return end
+		
+		-- Check if the tool is still equipped (if a toolName was provided)
+		if toolName and not char:FindFirstChild(toolName) then return end
 
-	local config = toolName and TOOL_ANIMS[toolName]
+		local config = toolName and TOOL_ANIMS[toolName]
 	
 	if config then
 		-- ENABLE OVERRIDE
@@ -161,6 +174,7 @@ local function applyAnimation(char, toolName)
 			end
 		end
 	end
+	end)
 end
 
 function AnimationController.SetSuspended(suspended)
@@ -184,6 +198,36 @@ function AnimationController.Start()
 	local function onCharAdded(char)
 		originalAnimsMap = {} -- Reset store
 
+		-- Inject Default Anims into Animate script
+		task.spawn(function()
+			local animate = char:WaitForChild("Animate", 5)
+			if animate then
+				local needsRefresh = false
+				
+				if DEFAULT_PLAYER_ANIMS.Walk ~= "" and DEFAULT_PLAYER_ANIMS.Walk ~= "rbxassetid://0" then
+					local walk = animate:FindFirstChild("walk")
+					if walk and walk:FindFirstChild("WalkAnim") then walk.WalkAnim.AnimationId = DEFAULT_PLAYER_ANIMS.Walk end
+					local run = animate:FindFirstChild("run")
+					if run and run:FindFirstChild("RunAnim") then run.RunAnim.AnimationId = DEFAULT_PLAYER_ANIMS.Walk end
+					needsRefresh = true
+				end
+				
+				if DEFAULT_PLAYER_ANIMS.Idle ~= "" and DEFAULT_PLAYER_ANIMS.Idle ~= "rbxassetid://0" then
+					local idle = animate:FindFirstChild("idle")
+					if idle and idle:FindFirstChild("Animation1") then idle.Animation1.AnimationId = DEFAULT_PLAYER_ANIMS.Idle end
+					if idle and idle:FindFirstChild("Animation2") then idle.Animation2.AnimationId = DEFAULT_PLAYER_ANIMS.Idle end
+					needsRefresh = true
+				end
+				
+				if needsRefresh then
+					-- Refresh Animate script
+					animate.Disabled = true
+					task.wait()
+					animate.Disabled = false
+				end
+			end
+		end)
+
 		-- Watch for tool equip
 		char.ChildAdded:Connect(function(child)
 			if child:IsA("Tool") then
@@ -202,6 +246,8 @@ function AnimationController.Start()
 		local initTool = char:FindFirstChildWhichIsA("Tool")
 		if initTool then
 			applyAnimation(char, initTool.Name)
+		else
+			applyAnimation(char, nil)
 		end
 	end
 	

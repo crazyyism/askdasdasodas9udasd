@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ContentProvider = game:GetService("ContentProvider")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local Lighting = game:GetService("Lighting")
 local StarterGui = game:GetService("StarterGui")
 
@@ -39,6 +40,10 @@ local FunnyImage
 local Phase2Frame
 local PlayButton
 local Phase2Title
+local Phase2BlackBottom
+local Phase2BlackTop
+local Phase2Music
+local Phase2BlackBottomChildren = {}
 local buttonOriginalPositions = {}
 
 local lsCameraPart = nil
@@ -115,6 +120,9 @@ local function createUI()
 	if Phase2Frame then
 		PlayButton = Phase2Frame:FindFirstChild("Play")
 		Phase2Title = Phase2Frame:FindFirstChild("Title")
+		Phase2BlackBottom = Phase2Frame:FindFirstChild("BlackBottom")
+		Phase2BlackTop = Phase2Frame:FindFirstChild("BlackTop")
+		Phase2Music = Phase2Frame:FindFirstChild("Music")
 		
 		-- Destroy Settings and Credits buttons if they exist
 		local settingsBtn = Phase2Frame:FindFirstChild("Settings")
@@ -130,6 +138,30 @@ local function createUI()
 				Phase2Title.Visible = true
 			end
 			
+			if Phase2BlackTop then 
+				buttonOriginalPositions[Phase2BlackTop] = Phase2BlackTop.Position 
+				Phase2BlackTop.Visible = true
+			end
+			if Phase2Music then 
+				buttonOriginalPositions[Phase2Music] = Phase2Music.Position 
+				Phase2Music.Visible = true
+			end
+			if Phase2BlackBottom then
+				buttonOriginalPositions[Phase2BlackBottom] = Phase2BlackBottom.Position
+				Phase2BlackBottom.Visible = true
+				table.clear(Phase2BlackBottomChildren)
+				for _, child in ipairs(Phase2BlackBottom:GetChildren()) do
+					if child:IsA("GuiObject") and string.sub(child.Name, 1, 11) == "BlackBottom" then
+						table.insert(Phase2BlackBottomChildren, child)
+						buttonOriginalPositions[child] = child.Position
+						child.Visible = true
+					end
+				end
+				-- Sort by Name so BlackBottom1 -> BlackBottom2 -> BlackBottom3 order is strictly guaranteed
+				table.sort(Phase2BlackBottomChildren, function(a, b)
+					return a.Name < b.Name
+				end)
+			end
 			Phase2Frame.Visible = false
 			PlayButton.Visible = true
 		end
@@ -511,11 +543,11 @@ local function preloadPhase2Async()
 		local originalRig = loadingStuff:FindFirstChild("LoadingRig")
 		if originalRig then
 			local success, desc = pcall(function()
-				return Players:GetHumanoidDescriptionFromUserId(player.UserId)
+				return Players:GetHumanoidDescriptionFromUserIdAsync(player.UserId)
 			end)
 			
 			if success and desc then
-				avatarModel = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+				avatarModel = Players:CreateHumanoidModelFromDescriptionAsync(desc, Enum.HumanoidRigType.R15)
 			else
 				local char = player.Character
 				if char then
@@ -620,21 +652,60 @@ local function transitionToPhase2()
 		Phase2Frame.GroupTransparency = 0
 		Phase2Frame.Visible = true
 		
-		-- Tween Phase 2 Title and PlayButton left to original positions instead of fading in (staggered, Quad style)
-		local enterTweenInfo = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		-- Tween Phase 2 elements into place
+		local enterTweenInfo = TweenInfo.new(2.0, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		
+		-- Tween from DOWN (Y.Scale + 1.2)
+		-- Bar itself tweens immediately
+		if Phase2BlackBottom and buttonOriginalPositions[Phase2BlackBottom] then
+			local orig = buttonOriginalPositions[Phase2BlackBottom]
+			Phase2BlackBottom.Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale + 1.2, orig.Y.Offset)
+			TweenService:Create(Phase2BlackBottom, enterTweenInfo, {Position = orig}):Play()
+		end
+
+		-- Title and Play tween in after the bar with 0.3s gaps
 		if Phase2Title and buttonOriginalPositions[Phase2Title] then
 			local orig = buttonOriginalPositions[Phase2Title]
-			Phase2Title.Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
-			TweenService:Create(Phase2Title, enterTweenInfo, {Position = orig}):Play()
+			Phase2Title.Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale + 1.2, orig.Y.Offset)
+			task.delay(0.3, function()
+				if Phase2Title and Phase2Title.Parent then
+					TweenService:Create(Phase2Title, enterTweenInfo, {Position = orig}):Play()
+				end
+			end)
 		end
 		if PlayButton and buttonOriginalPositions[PlayButton] then
 			local orig = buttonOriginalPositions[PlayButton]
-			PlayButton.Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
-			task.delay(0.5, function()
+			PlayButton.Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale + 1.2, orig.Y.Offset)
+			task.delay(0.6, function()
 				if PlayButton and PlayButton.Parent then
 					TweenService:Create(PlayButton, enterTweenInfo, {Position = orig}):Play()
 				end
 			end)
+		end
+
+		-- Tween from RIGHT (X.Scale + 1.2) in increments of 0.2s, starting even later (0.8s)
+		for i, child in ipairs(Phase2BlackBottomChildren) do
+			if buttonOriginalPositions[child] then
+				local orig = buttonOriginalPositions[child]
+				child.Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
+				task.delay(0.8 + (i * 0.2), function()
+					if child and child.Parent then
+						TweenService:Create(child, enterTweenInfo, {Position = orig}):Play()
+					end
+				end)
+			end
+		end
+
+		-- Tween from UP (Y.Scale - 1.2)
+		if Phase2Music and buttonOriginalPositions[Phase2Music] then
+			local orig = buttonOriginalPositions[Phase2Music]
+			Phase2Music.Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale - 1.2, orig.Y.Offset)
+			TweenService:Create(Phase2Music, enterTweenInfo, {Position = orig}):Play()
+		end
+		if Phase2BlackTop and buttonOriginalPositions[Phase2BlackTop] then
+			local orig = buttonOriginalPositions[Phase2BlackTop]
+			Phase2BlackTop.Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale - 1.2, orig.Y.Offset)
+			TweenService:Create(Phase2BlackTop, enterTweenInfo, {Position = orig}):Play()
 		end
 	end
 	
@@ -682,32 +753,86 @@ local function transitionToPhase2()
 				-- Stop parallax immediately
 				inPhase2 = false
 				
-				-- Tween PlayButton and Phase2Title right off-screen
-				local exitTweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-				local playTween, titleTween
+				-- Reverse all Phase 2 tweens
+				local exitTweenInfo = TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 				
+				-- Tween RIGHT (X.Scale + 1.2) - Reverse order of children (Child 3 -> Child 2 -> Child 1)
+				local numChildren = #Phase2BlackBottomChildren
+				for i, child in ipairs(Phase2BlackBottomChildren) do
+					if buttonOriginalPositions[child] then
+						local orig = buttonOriginalPositions[child]
+						local reverseIndex = numChildren - i -- Child 3 = 0s, Child 2 = 0.2s, Child 1 = 0.4s
+						task.delay(reverseIndex * 0.2, function()
+							if child and child.Parent then
+								TweenService:Create(child, exitTweenInfo, {
+									Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
+								}):Play()
+							end
+						end)
+					end
+				end
+
+				-- Tween PlayButton DOWN (0.6s)
 				if PlayButton and buttonOriginalPositions[PlayButton] then
 					local orig = buttonOriginalPositions[PlayButton]
-					playTween = TweenService:Create(PlayButton, exitTweenInfo, {
-						Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
-					})
-					playTween:Play()
+					task.delay(0.6, function()
+						if PlayButton and PlayButton.Parent then
+							TweenService:Create(PlayButton, exitTweenInfo, {
+								Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale + 1.2, orig.Y.Offset)
+							}):Play()
+						end
+					end)
 				end
 				
+				-- Tween Title DOWN (0.9s)
 				if Phase2Title and buttonOriginalPositions[Phase2Title] then
 					local orig = buttonOriginalPositions[Phase2Title]
-					titleTween = TweenService:Create(Phase2Title, exitTweenInfo, {
-						Position = UDim2.new(orig.X.Scale + 1.2, orig.X.Offset, orig.Y.Scale, orig.Y.Offset)
-					})
-					titleTween:Play()
+					task.delay(0.9, function()
+						if Phase2Title and Phase2Title.Parent then
+							TweenService:Create(Phase2Title, exitTweenInfo, {
+								Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale + 1.2, orig.Y.Offset)
+							}):Play()
+						end
+					end)
 				end
 				
-				-- Wait for the exit tween to complete before starting transition
-				if playTween then
-					playTween.Completed:Wait()
-				else
-					task.wait(0.6)
+				-- Tween Base Bars DOWN/UP (1.2s)
+				local finalDelay = 1.2
+				if Phase2BlackBottom and buttonOriginalPositions[Phase2BlackBottom] then
+					local orig = buttonOriginalPositions[Phase2BlackBottom]
+					task.delay(finalDelay, function()
+						if Phase2BlackBottom and Phase2BlackBottom.Parent then
+							TweenService:Create(Phase2BlackBottom, exitTweenInfo, {
+								Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale + 1.2, orig.Y.Offset)
+							}):Play()
+						end
+					end)
 				end
+
+				if Phase2Music and buttonOriginalPositions[Phase2Music] then
+					local orig = buttonOriginalPositions[Phase2Music]
+					task.delay(finalDelay, function()
+						if Phase2Music and Phase2Music.Parent then
+							TweenService:Create(Phase2Music, exitTweenInfo, {
+								Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale - 1.2, orig.Y.Offset)
+							}):Play()
+						end
+					end)
+				end
+				
+				if Phase2BlackTop and buttonOriginalPositions[Phase2BlackTop] then
+					local orig = buttonOriginalPositions[Phase2BlackTop]
+					task.delay(finalDelay, function()
+						if Phase2BlackTop and Phase2BlackTop.Parent then
+							TweenService:Create(Phase2BlackTop, exitTweenInfo, {
+								Position = UDim2.new(orig.X.Scale, orig.X.Offset, orig.Y.Scale - 1.2, orig.Y.Offset)
+							}):Play()
+						end
+					end)
+				end
+				
+				-- Wait for the absolute longest tween + delay to finish before starting spawn transition
+				task.wait(finalDelay + 0.8)
 				
 				startSpawnTransition(avatarModel)
 			end)

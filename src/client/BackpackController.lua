@@ -81,6 +81,31 @@ function BackpackController.Start()
 		
 		model.Parent = character
 		
+		-- Play backpack-specific animations
+		if backpackId == "WaterWings" then
+			local animController = model:FindFirstChild("AnimationController")
+			if not animController then
+				animController = Instance.new("AnimationController")
+				animController.Parent = model
+			end
+			local animator = animController:FindFirstChild("Animator")
+			if not animator then
+				animator = Instance.new("Animator")
+				animator.Parent = animController
+			end
+			
+			local animation = Instance.new("Animation")
+			animation.AnimationId = "rbxassetid://138126940686440"
+			
+			task.spawn(function()
+				-- Wait for the model to be fully replicated in workspace
+				task.wait(0.1)
+				local track = animator:LoadAnimation(animation)
+				track.Looped = true
+				track:Play()
+			end)
+		end
+		
 		-- Track if local player
 		if character == player.Character then
 			currentBackpackModel = model

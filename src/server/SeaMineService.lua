@@ -5,21 +5,40 @@ local TweenService = game:GetService("TweenService")
 
 local ResourceConfig = require(ReplicatedStorage.Shared.ResourceConfig)
 local TokenConfig = require(ReplicatedStorage.Shared.TokenConfig)
+local ChanceConfig = require(ReplicatedStorage.Shared.ChanceConfig)
 
 local SeaMineService = {}
 
 local function getFieldFolder(fieldName)
 	if not fieldName then return nil end
+	
 	local folder = Workspace:FindFirstChild(fieldName)
 	if folder then return folder end
 	
+	local reefsFolder = Workspace:FindFirstChild("Reefs")
+	if reefsFolder then
+		folder = reefsFolder:FindFirstChild(fieldName)
+		if folder then return folder end
+	end
+	
 	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	
 	for _, child in ipairs(Workspace:GetChildren()) do
 		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
 		if childClean == cleanName then
 			return child
 		end
 	end
+	
+	if reefsFolder then
+		for _, child in ipairs(reefsFolder:GetChildren()) do
+			local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+			if childClean == cleanName then
+				return child
+			end
+		end
+	end
+	
 	return nil
 end
 
@@ -29,56 +48,6 @@ local MAX_MINES_PER_REEF = 3
 local MINE_SPAWN_INTERVAL = 300 -- 5 minutes
 local COLLECTION_RADIUS = 100
 
-local MINES_CONFIG = {
-	["Common"] = {
-		Name = "Common Sea Mine",
-		Weight = 70,
-		BaseCapacity = 2000,
-		Color = Color3.fromRGB(50, 205, 50), -- Green
-		Material = Enum.Material.Plastic,
-		RewardMultiplier = 1.0,
-	},
-	["Uncommon"] = {
-		Name = "Uncommon Sea Mine",
-		Weight = 18,
-		BaseCapacity = 6000,
-		Color = Color3.fromRGB(255, 215, 0), -- Gold/Yellow
-		Material = Enum.Material.Glass,
-		RewardMultiplier = 1.5,
-	},
-	["Rare"] = {
-		Name = "Rare Sea Mine",
-		Weight = 8,
-		BaseCapacity = 20000,
-		Color = Color3.fromRGB(0, 191, 255), -- Deep Sky Blue
-		Material = Enum.Material.Neon,
-		RewardMultiplier = 2.5,
-	},
-	["Epic"] = {
-		Name = "Epic Sea Mine",
-		Weight = 3.5,
-		BaseCapacity = 80000,
-		Color = Color3.fromRGB(139, 0, 139), -- Dark Magenta
-		Material = Enum.Material.Neon,
-		RewardMultiplier = 5.0,
-	},
-	["Legendary"] = {
-		Name = "Legendary Sea Mine",
-		Weight = 0.45,
-		BaseCapacity = 350000,
-		Color = Color3.fromRGB(255, 69, 0), -- Orange Red
-		Material = Enum.Material.Neon,
-		RewardMultiplier = 10.0,
-	},
-	["Supreme"] = {
-		Name = "Supreme Sea Mine",
-		Weight = 0.05,
-		BaseCapacity = 1500000,
-		Color = Color3.fromRGB(238, 130, 238), -- Violet
-		Material = Enum.Material.Neon,
-		RewardMultiplier = 25.0,
-	}
-}
 
 local REEF_MULTIPLIERS = {
 	["Freshwater Reef"] = 1,
@@ -88,6 +57,7 @@ local REEF_MULTIPLIERS = {
 	["Runic Reef"] = 15,
 	["Coralline Reef"] = 30,
 	["Obsidian Reef"] = 100,
+	["Axolotl Reef"] = 150,
 	["Crystal Reef"] = 250,
 	["Ghastly Reef"] = 500,
 	["Heavensent Reef"] = 1500,
@@ -97,18 +67,18 @@ local REEF_MULTIPLIERS = {
 
 local function GetRandomRarity()
 	local totalWeight = 0
-	for _, tier in pairs(MINES_CONFIG) do
+	for _, tier in pairs(ChanceConfig.SeaMineTypes) do
 		totalWeight = totalWeight + tier.Weight
 	end
 	
 	local rand = math.random() * totalWeight
-	for name, tier in pairs(MINES_CONFIG) do
+	for name, tier in pairs(ChanceConfig.SeaMineTypes) do
 		if rand <= tier.Weight then
 			return name, tier
 		end
 		rand = rand - tier.Weight
 	end
-	return "Common", MINES_CONFIG["Common"]
+	return "Common", ChanceConfig.SeaMineTypes["Common"]
 end
 
 -- List of reef names
@@ -239,7 +209,7 @@ function SeaMineService.SpawnMine(position, reefName)
 	
 	-- Select rarity and scale capacity
 	local rarityName, rarityConfig = GetRandomRarity()
-	local targetCapacity = math.floor(rarityConfig.BaseCapacity * (REEF_MULTIPLIERS[reefName] or 1))
+	local targetCapacity = math.floor(rarityConfig.BaseCapacity)
 	
 	-- Style the Model based on rarity (neon, colors, highlights)
 	for _, p in ipairs(mineModel:GetDescendants()) do
@@ -268,6 +238,7 @@ function SeaMineService.SpawnMine(position, reefName)
 		AlgaeAmount = 0,
 		TargetCapacity = targetCapacity,
 		RarityName = rarityConfig.Name,
+		RarityKey = rarityName,
 		RewardMultiplier = rarityConfig.RewardMultiplier,
 		Position = position,
 		Exploded = false,
@@ -411,7 +382,7 @@ function SeaMineService.SpawnMineUser(player, position, reefName)
 	
 	-- Select rarity and scale capacity
 	local rarityName, rarityConfig = GetRandomRarity()
-	local targetCapacity = math.floor(rarityConfig.BaseCapacity * (REEF_MULTIPLIERS[reefName] or 1))
+	local targetCapacity = math.floor(rarityConfig.BaseCapacity)
 	
 	-- Style the Model based on rarity (neon, colors, highlights)
 	for _, p in ipairs(mineModel:GetDescendants()) do
@@ -440,6 +411,7 @@ function SeaMineService.SpawnMineUser(player, position, reefName)
 		AlgaeAmount = 0,
 		TargetCapacity = targetCapacity,
 		RarityName = rarityConfig.Name,
+		RarityKey = rarityName,
 		RewardMultiplier = rarityConfig.RewardMultiplier,
 		Position = position,
 		Exploded = false,
@@ -582,6 +554,11 @@ function SeaMineService.ExplodeMine(mineData, wasPopped)
 				if player then
 					PlayerData.update(player, function(data)
 						data.SeaMinesPopped = (data.SeaMinesPopped or 0) + 1
+
+						if mineData.RarityData and mineData.RarityData.Name then
+							local specificKey = string.gsub(mineData.RarityData.Name, ' Sea Mine', 'SeaMinesPopped')
+							data[specificKey] = (data[specificKey] or 0) + 1
+						end
 						return data
 					end)
 				end
@@ -661,8 +638,8 @@ function SeaMineService.ExplodeMine(mineData, wasPopped)
 	end
 end
 
-function SeaMineService.GetRandomScaledDrop(bonusMultiplier)
-	local Drops = TokenConfig.Drops
+function SeaMineService.GetRandomScaledDrop(bonusMultiplier, rarityKey)
+	local Drops = ChanceConfig.SeaMineDrops[rarityKey] or ChanceConfig.SeaMineDrops["Common"]
 	local totalWeight = 0
 	
 	local scaledDrops = {}
@@ -692,7 +669,9 @@ function SeaMineService.SpawnTokens(mineData)
 		centerPos = mineData.MainPart.Position
 	end
 	
-	local amountToSpawn = math.floor(math.random(40, 70) * (mineData.RewardMultiplier or 1))
+	local baseDrops = math.random(40, 70)
+	local tierScale = 1 + math.max(0, math.log10(mineData.RewardMultiplier or 1))
+	local amountToSpawn = math.floor(baseDrops * tierScale)
 	local algaeMod = math.floor(mineData.AlgaeAmount / 10000)
 	-- Diminishing returns scaling scaled up by Sprout Rarity's multiplier
 	local bonusMultiplier = (1 + (math.log10(algaeMod + 1) * 0.75)) * (mineData.RewardMultiplier or 1)
@@ -716,12 +695,20 @@ function SeaMineService.SpawnTokens(mineData)
 			local playerBiomass = 0
 			local playerItems = {}
 			for i = 1, playerAmountToSpawn do
-				local dropItem = SeaMineService.GetRandomScaledDrop(bonusMultiplier)
+				local dropItem = SeaMineService.GetRandomScaledDrop(bonusMultiplier, mineData.RarityKey)
 				if dropItem == "Biomass" then
-					local multiplier = math.random(90, 150) / 17500
-					playerBiomass = playerBiomass + math.floor(mineData.AlgaeAmount * multiplier)
+					local bioCfg = ChanceConfig.SeaMineBiomassReward or {Min = 90, Max = 150, Divisor = 17500}
+					local rarityCfg = ChanceConfig.SeaMineTypes[mineData.RarityKey]
+					local baseMultiplier = math.random(bioCfg.Min, bioCfg.Max) / bioCfg.Divisor
+					local specificMultiplier = rarityCfg and rarityCfg.BiomassRewardMultiplier or 1
+					playerBiomass = playerBiomass + math.floor(mineData.AlgaeAmount * baseMultiplier * specificMultiplier)
 				elseif dropItem then
-					playerItems[dropItem] = (playerItems[dropItem] or 0) + 1
+					local itemAmount = 1
+					local isRare = string.find(dropItem, "Egg") or string.find(dropItem, "Gem") or dropItem == "Remote Warp"
+					if not isRare then
+						itemAmount = math.max(1, math.floor(mineData.RewardMultiplier or 1))
+					end
+					playerItems[dropItem] = (playerItems[dropItem] or 0) + itemAmount
 				end
 			end
 			
@@ -769,3 +756,4 @@ function SeaMineService.SpawnTokens(mineData)
 end
 
 return SeaMineService
+

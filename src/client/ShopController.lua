@@ -397,7 +397,7 @@ function ShopController.Start()
 				-- No shop nearby
 				canInteract = false
 				shopTarget = nil
-				if not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Aquarium") and not actionLabel.Text:match("Convert") then
+				if not actionLabel.Text:match("Talk") and not actionLabel.Text:match("Cannon") and not actionLabel.Text:match("Wish") and not actionLabel.Text:match("Aquarium") and not actionLabel.Text:match("Convert") then
 					interactionFrame.Visible = false
 				end
 			end
@@ -538,6 +538,105 @@ function ShopController.UpdatePurchaseButton(shopFrame, shopName, itemEntry, dis
 	end
 	
 	if isOwned then
+		if itemId == "Hydroglider" and not (clientData.UnlockedTools and table.find(clientData.UnlockedTools, "Hydroglider+")) then
+			-- Upgrade State for Hydroglider
+			local upgradeItem = EquipmentConfig["Hydroglider+"]
+			local upgradeId = "Hydroglider+"
+			
+			local canAfford = true
+			local missingMaterial = nil
+			
+			if upgradeItem.Currency == "Biomass" then
+				canAfford = (clientData.Biomass or 0) >= upgradeItem.Price
+			end
+			
+			if canAfford and upgradeItem.Materials then
+				for matName, required in pairs(upgradeItem.Materials) do
+					local owned = 0
+					if matName == "Pearl" then
+						owned = clientData.Pearls or 0
+					elseif clientData.Inventory then
+						owned = clientData.Inventory[matName] or 0
+					end
+					if owned < required then
+						canAfford = false
+						missingMaterial = matName
+						break
+					end
+				end
+			end
+			
+			if canAfford then
+				purchaseButton.Interactable = true
+				purchaseButton.Active = true
+				purchaseButton.AutoButtonColor = true
+				purchaseButton.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
+				if buttonText then buttonText.Text = "Upgrade" end
+				if buyFrame then buyFrame.BackgroundColor3 = Color3.fromRGB(150, 0, 255) end
+				
+				currentPurchaseConnection = purchaseButton.MouseButton1Click:Connect(function()
+					ShopController.PurchaseItem(shopName, upgradeId, upgradeItem)
+				end)
+			else
+				purchaseButton.Interactable = false
+				purchaseButton.AutoButtonColor = false
+				purchaseButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+				if buyFrame then buyFrame.BackgroundColor3 = Color3.fromRGB(200, 50, 50) end
+				if buttonText then 
+					if missingMaterial then
+						local displayMat = missingMaterial == "Pearl" and "Pearls" or missingMaterial
+						buttonText.Text = "Not enough " .. displayMat
+					else
+						buttonText.Text = "Not enough " .. upgradeItem.Currency 
+					end
+				end
+			end
+			
+			-- Update UI to show Upgrade Cost
+			local cost = shopEquip:FindFirstChild("Cost")
+			if cost and cost:FindFirstChild("CostText") then
+				cost.CostText.Text = FormatNumber(upgradeItem.Price) .. " Biomass"
+			end
+			
+			-- Manually append upgrade materials
+			local materialReqFrame = shopEquip:FindFirstChild("MaterialReq")
+			if materialReqFrame and upgradeItem.Materials then
+				local template = materialReqFrame:FindFirstChild("AbilityTemplate")
+				if template then
+					-- Clear previous generated items
+					for _, child in ipairs(materialReqFrame:GetChildren()) do
+						if child:IsA("Frame") and child.Name == "MaterialItem" then
+							child:Destroy()
+						end
+					end
+					materialReqFrame.Visible = true
+					for matName, requiredAmount in pairs(upgradeItem.Materials) do
+						local matItem = template:Clone()
+						matItem.Name = "MaterialItem"
+						matItem.Visible = true
+						matItem.Parent = materialReqFrame
+						
+						local amountLabel = matItem:FindFirstChild("Amount")
+						local imageLabel = matItem:FindFirstChild("AbilityImage")
+						local ownedCount = 0
+						if matName == "Pearl" then ownedCount = clientData.Pearls or 0
+						elseif clientData.Inventory then ownedCount = clientData.Inventory[matName] or 0 end
+						
+						if amountLabel then
+							amountLabel.Text = tostring(requiredAmount)
+							amountLabel.TextColor3 = (ownedCount >= requiredAmount) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 50, 50)
+						end
+						if imageLabel then
+							local eggCfg = EquipmentConfig[matName]
+							if eggCfg and eggCfg.ImageId then imageLabel.Image = eggCfg.ImageId end
+						end
+					end
+				end
+			end
+			
+			return
+		end
+
 		if isEquipped then
 			-- Equipped State
 			if item.ProductType == "Artifact" then
@@ -815,7 +914,7 @@ function ShopController.UpdateShopDisplay(shopFrame, shopName)
 						end
 						
 						if imageLabel then
-							local eggCfg = EquipmentConfig.Eggs[matName]
+							local eggCfg = EquipmentConfig[matName]
 							if eggCfg and eggCfg.ImageId then
 								imageLabel.Image = eggCfg.ImageId
 							end

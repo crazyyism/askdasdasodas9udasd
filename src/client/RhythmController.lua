@@ -48,7 +48,8 @@ local function GetRhythmScreen()
 	return gui
 end
 
-local function SpawnButton()
+local function SpawnButton(shrinkTime)
+	shrinkTime = shrinkTime or 2.5
 	local screen = GetRhythmScreen()
 	local mainGui = playerGui:WaitForChild("Main")
 	local template = mainGui:WaitForChild("RhythmButton")
@@ -110,7 +111,7 @@ local function SpawnButton()
 	iStroke2.Thickness = 2
 	iStroke2.Parent = icon
 	
-	local rhythmTween = TweenService:Create(indicator, TweenInfo.new(2.5, Enum.EasingStyle.Linear), {
+	local rhythmTween = TweenService:Create(indicator, TweenInfo.new(shrinkTime, Enum.EasingStyle.Linear), {
 		Size = UDim2.fromScale(0, 0)
 	})
 	rhythmTween:Play()
@@ -167,9 +168,9 @@ local function SpawnButton()
 		end
 		
 		local timeElapsed = os.clock() - spawnTime
-		-- Scale logic: starts at 2.0, goes to 0 over 2.5 seconds.
-		-- Hits 1.0 (the target) at exactly 1.25 seconds.
-		local currentScale = 2.0 - (2.0 * (timeElapsed / 2.5))
+		-- Scale logic: starts at 2.0, goes to 0 over shrinkTime seconds.
+		-- Hits 1.0 (the target) at exactly half of shrinkTime.
+		local currentScale = 2.0 - (2.0 * (timeElapsed / shrinkTime))
 		
 		local diff = math.abs(currentScale - 1.0)
 		local rating = nil
@@ -236,14 +237,17 @@ local function SpawnButton()
 		activeButtons[button] = nil
 	end)
 	
-	-- Auto cleanup after 2.5 seconds (+ some grace)
-	task.delay(2.7, function()
+	-- Auto cleanup after shrinkTime seconds (+ some grace)
+	task.delay(shrinkTime + 0.2, function()
 		Cleanup(false) -- Auto cleanup counts as a miss
 	end)
 end
 
 function RhythmController.Start()
-	RhythmGameEvent.OnClientEvent:Connect(function(maxCount)
+	RhythmGameEvent.OnClientEvent:Connect(function(maxCount, spawnRate, shrinkTime)
+		spawnRate = spawnRate or 3.0
+		shrinkTime = shrinkTime or 2.5
+		
 		local startTime = os.clock()
 		local nextSpawn = 0
 		local spawnCount = 0
@@ -259,9 +263,9 @@ function RhythmController.Start()
 			end
 			
 			if elapsed >= nextSpawn and spawnCount < maxCount then
-				SpawnButton()
+				SpawnButton(shrinkTime)
 				spawnCount = spawnCount + 1
-				nextSpawn = elapsed + 3.0 -- Every 3 seconds
+				nextSpawn = elapsed + spawnRate
 			end
 		end)
 

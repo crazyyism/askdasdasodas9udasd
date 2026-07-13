@@ -48,11 +48,16 @@ return function(context)
 						task.delay(moveTime, function() if sunPart and sunPart.Parent then sunPart:SetAttribute("Moving", false) end end)
 					end
 				else
-					local centerPos = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.Position or startPos
-					local target = Vector3.new(centerPos.X, startPos.Y, centerPos.Z)
+					-- Wander randomly around the initial spawn position
+					local wanderRadius = 30
+					local offsetX = (math.random() * 2 - 1) * wanderRadius
+					local offsetZ = (math.random() * 2 - 1) * wanderRadius
+					local target = Vector3.new(startPos.X + offsetX, startPos.Y, startPos.Z + offsetZ)
+					
 					local dist = (target - sunPart.Position).Magnitude
-					local moveTime = math.max(0.5, dist / 4)
-					TweenService:Create(sunPart, TweenInfo.new(moveTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = target}):Play()
+					local moveTime = math.max(0.5, dist / 15) -- Move faster around the reef
+					
+					TweenService:Create(sunPart, TweenInfo.new(moveTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Position = target}):Play()
 					sunPart:SetAttribute("Moving", true)
 					task.delay(moveTime, function() if sunPart and sunPart.Parent then sunPart:SetAttribute("Moving", false) end end)
 				end

@@ -8,16 +8,34 @@ local FieldService = {}
 
 local function getFieldFolder(fieldName)
 	if not fieldName then return nil end
+	
 	local folder = Workspace:FindFirstChild(fieldName)
 	if folder then return folder end
 	
+	local reefsFolder = Workspace:FindFirstChild("Reefs")
+	if reefsFolder then
+		folder = reefsFolder:FindFirstChild(fieldName)
+		if folder then return folder end
+	end
+	
 	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	
 	for _, child in ipairs(Workspace:GetChildren()) do
 		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
 		if childClean == cleanName then
 			return child
 		end
 	end
+	
+	if reefsFolder then
+		for _, child in ipairs(reefsFolder:GetChildren()) do
+			local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+			if childClean == cleanName then
+				return child
+			end
+		end
+	end
+	
 	return nil
 end
 

@@ -17,7 +17,7 @@ local collectedTokens = {} -- Local Cache
 local processingTokens = {} -- Debounce
 local localData = nil
 
-local tokenFolder = workspace:WaitForChild("TokenRewards")
+local tokenFolder = nil
 
 local function HideToken(tokenPart, instant)
 	if not tokenPart then return end
@@ -161,31 +161,35 @@ function TokenController.Start()
 		end
 	end)
 	
-	-- Init existing
-	for _, child in ipairs(tokenFolder:GetChildren()) do
-		SetupToken(child)
-		local id = GetTokenId(child)
-		tokenMap[id] = child
-	end
-	
-	-- Listen for new
-	tokenFolder.ChildAdded:Connect(function(child)
-		SetupToken(child)
-		local id = GetTokenId(child)
-		tokenMap[id] = child
-	end)
-	
-	-- Re-apply hidden state on character respawn (since StreamOut/In might reset visuals locally)
-	player.CharacterAdded:Connect(function()
-		task.wait(1) -- Wait for workspace to settle
-		for id, _ in pairs(collectedTokens) do
-			-- Find token by UniqueId or Name
-			for _, child in ipairs(tokenFolder:GetChildren()) do
-				if GetTokenId(child) == id then
-					HideToken(child, true)
+	task.spawn(function()
+		tokenFolder = workspace:WaitForChild("TokenRewards", math.huge)
+		
+		-- Init existing
+		for _, child in ipairs(tokenFolder:GetChildren()) do
+			SetupToken(child)
+			local id = GetTokenId(child)
+			tokenMap[id] = child
+		end
+		
+		-- Listen for new
+		tokenFolder.ChildAdded:Connect(function(child)
+			SetupToken(child)
+			local id = GetTokenId(child)
+			tokenMap[id] = child
+		end)
+		
+		-- Re-apply hidden state on character respawn (since StreamOut/In might reset visuals locally)
+		player.CharacterAdded:Connect(function()
+			task.wait(1) -- Wait for workspace to settle
+			for id, _ in pairs(collectedTokens) do
+				-- Find token by UniqueId or Name
+				for _, child in ipairs(tokenFolder:GetChildren()) do
+					if GetTokenId(child) == id then
+						HideToken(child, true)
+					end
 				end
 			end
-		end
+		end)
 	end)
 	
 	-- Optimize drop tokens from Sea Mines/Harvesting globally

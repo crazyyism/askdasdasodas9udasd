@@ -10,8 +10,8 @@ local artifactsFolder = nil -- Container for visual models
 local activeArtifacts = {} -- List of {Model, AngleOffset}
 local activeSettings = {}
 
-local ART_HEIGHT = 7
-local ART_RADIUS = 8
+local ART_HEIGHT = 0 -- Orbit at HRP instead of above
+local ART_RADIUS = 6 -- Slightly tighter radius
 local ROT_SPEED = (math.pi * 2) / 10 -- 1 rotation per 10 seconds
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -22,6 +22,39 @@ local function ClearArtifacts()
 		if entry.Model then entry.Model:Destroy() end
 	end
 	activeArtifacts = {}
+end
+
+local function scaleEffects(root, scale)
+	for _, desc in ipairs(root:GetDescendants()) do
+		if desc:IsA("ParticleEmitter") then
+			-- Scale Size (NumberSequence)
+			local sKps = {}
+			for _, kp in ipairs(desc.Size.Keypoints) do
+				sKps[#sKps+1] = NumberSequenceKeypoint.new(kp.Time, kp.Value * scale, kp.Envelope * scale)
+			end
+			desc.Size = NumberSequence.new(sKps)
+			-- Scale Speed (NumberRange)
+			desc.Speed = NumberRange.new(desc.Speed.Min * scale, desc.Speed.Max * scale)
+
+		elseif desc:IsA("Beam") then
+			desc.Width0 = desc.Width0 * scale
+			desc.Width1 = desc.Width1 * scale
+			desc.TextureLength = desc.TextureLength * scale
+			desc.CurveSize0 = desc.CurveSize0 * scale
+			desc.CurveSize1 = desc.CurveSize1 * scale
+
+		elseif desc:IsA("Trail") then
+			desc.MinLength = desc.MinLength * scale
+			desc.TextureLength = desc.TextureLength * scale
+
+		elseif desc:IsA("SpecialMesh") then
+			desc.Scale  = desc.Scale  * scale
+			desc.Offset = desc.Offset * scale
+
+		elseif desc:IsA("Attachment") then
+			desc.Position = desc.Position * scale
+		end
+	end
 end
 
 local function LoadArtifacts(list)
@@ -36,6 +69,7 @@ local function LoadArtifacts(list)
 		artifactsFolder.Parent = workspace.CurrentCamera
 	end
 	
+	local SCALE = 0.33
 	local count = #list
 	for i, artName in ipairs(list) do
 		-- Find Model
@@ -45,6 +79,16 @@ local function LoadArtifacts(list)
 		
 		if artTemplate then
 			local model = artTemplate:Clone()
+			
+			-- Scale geometry (BasePart sizes + positions)
+			if model:IsA("Model") then
+				model:ScaleTo(SCALE)
+			elseif model:IsA("BasePart") then
+				model.Size = model.Size * SCALE
+			end
+			-- Scale all effect properties ScaleTo doesn't touch
+			scaleEffects(model, SCALE)
+			
 			-- Ensure it's not colliding
 			for _, d in ipairs(model:GetDescendants()) do
 				if d:IsA("BasePart") then
@@ -63,6 +107,7 @@ local function LoadArtifacts(list)
 		end
 	end
 end
+
 
 local function UpdateVisuals(dt)
 	local char = player.Character
@@ -96,7 +141,7 @@ local function UpdateVisuals(dt)
 		
 		if entry.Model:IsA("Model") then
 			if entry.Model.PrimaryPart then
-				entry.Model:SetPrimaryPartCFrame(cf)
+				entry.Model:PivotTo(cf)
 			else
 				entry.Model:PivotTo(cf)
 			end

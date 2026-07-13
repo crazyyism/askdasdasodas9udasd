@@ -6,6 +6,7 @@ local Debris = game:GetService("Debris")
 
 local AnimationController = require(script.Parent.AnimationController)
 local HarvestController = require(script.Parent.HarvestController)
+local HotSpotController = require(script.Parent.HotSpotController)
 
 local HydroglideController = {}
 
@@ -17,6 +18,8 @@ local glideStartTime = 0
 local hiddenTools = {} -- [Tool] = original transparency map
 local GLIDE_SPEED = 65 -- Forward speed
 local SINK_SPEED = -2 -- Slow descent for "glide" feel
+
+local unlockedTools = {}
 
 local attachment = nil
 local linearVelocity = nil
@@ -33,7 +36,6 @@ function HydroglideController.Start()
 	local player = Players.LocalPlayer
 	
 	-- Listen for Data Updates to track ownership
-	local unlockedTools = {}
 	local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local DataUpdateEvent = Remotes:WaitForChild("DataUpdateEvent")
 	
@@ -67,6 +69,9 @@ function HydroglideController.Start()
 			if pressNow - lastJumpTime > 0.15 then
 				-- Check Ownership
 				if not unlockedTools["Hydroglider"] then return end
+				
+				-- Disable glider during Lava Boss hotspot
+				if HotSpotController.IsActive() then return end
 				
 				-- Altitude Check: Only works at -20 Y (World Position) and below
 				if rootPart.Position.Y <= GLOBAL_GLIDE_CEILING then
@@ -129,7 +134,8 @@ function HydroglideController.StartGlide()
 	local bv = Instance.new("BodyVelocity")
 	bv.Name = "HydroglideVelocity"
 	bv.MaxForce = Vector3.new(1, 1, 1) * 1000000 -- Consistent strong force
-	bv.Velocity = (rootPart.CFrame.LookVector * GLIDE_SPEED) + Vector3.new(0, SINK_SPEED, 0)
+	local initialSpeed = unlockedTools["Hydroglider+"] and 110 or GLIDE_SPEED
+	bv.Velocity = (rootPart.CFrame.LookVector * initialSpeed) + Vector3.new(0, SINK_SPEED, 0)
 	bv.Parent = rootPart
 	linearVelocity = bv -- Reusing variable name for cleaner diff, but it holds a BodyVelocity now
 	
@@ -285,7 +291,7 @@ function HydroglideController.UpdateGlide(dt)
 	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 	local humanoid = character and character:FindFirstChild("Humanoid")
 	
-	if not rootPart or not humanoid or not linearVelocity or not alignOrientation then
+	if not rootPart or not humanoid or not linearVelocity or not alignOrientation or HotSpotController.IsActive() then
 		HydroglideController.StopGlide()
 		return
 	end
@@ -355,13 +361,17 @@ function HydroglideController.UpdateGlide(dt)
 	currentBank = currentBank + (targetBank - currentBank) * (1 - math.exp(-dt * 8))
 
 	-- 2. Vertical Ascent Logic (Capped at 15 studs with strict clamping)
-	-- Acceleration Factor (1.0 second to reach full speed)
+	-- Acceleration Factor (1.0 second to reach full speed, 0.4s for upgrade)
+	local maxSpeed = unlockedTools["Hydroglider+"] and 110 or GLIDE_SPEED
+	local accelTime = unlockedTools["Hydroglider+"] and 0.4 or 1.0
+	local ascentMult = unlockedTools["Hydroglider+"] and 1.25 or ASCENT_SPEED_MULT
+	
 	local elapsed = os.clock() - glideStartTime
-	local speedMult = math.clamp(elapsed / 1.0, 0, 1)
-	local currentMaxSpeed = GLIDE_SPEED * speedMult
+	local speedMult = math.clamp(elapsed / accelTime, 0, 1)
+	local currentMaxSpeed = maxSpeed * speedMult
 	
 	-- Vertical intent based on camera pitch
-	local verticalClimb = camLook.Y * currentMaxSpeed * ASCENT_SPEED_MULT
+	local verticalClimb = camLook.Y * currentMaxSpeed * ascentMult
 	
 	-- Apply pitch tilt based on where we are looking (Tilt up when looking up)
 	local targetPitch = -camLook.Y * math.rad(30)
@@ -426,8 +436,9 @@ function HydroglideController.StopGlide()
 		local lookDir = cam and cam.CFrame.LookVector or rootPart.CFrame.LookVector
 		
 		-- Use pure camera direction for "Tidebreaker" feel (Look up to fly up, down to dive)
-		-- Speed: 120
-		launchVelocity = lookDir * 120
+		-- Speed: 120 (220 for upgrade)
+		local exitSpeed = unlockedTools["Hydroglider+"] and 220 or 120
+		launchVelocity = lookDir * exitSpeed
 	end
 	
 	-- Restore Tools

@@ -74,11 +74,11 @@ function ConversionService.StartFishLoop(player, fishIndex)
 			local levelBonus = 1.1 ^ (fishLevel - 1) -- Exponential +10% per level !
 			local totalAmount = math.floor((fishConfig.BaseStats.ConvertAmount or 1) * levelBonus)
 			
-			-- PASSIVE: Overtaking Melody (Boost speeds by 1% per stack)
+			-- PASSIVE: Overtaking Melody (Boost speeds by 5% per stack)
 			if fishConfig.Passive == "Overtaking Melody" then
 				local stacks = AbilityService.GetBuffStacks(player, "RhythmFever")
 				if stacks > 0 then
-					local boost = 1 + (stacks * 0.01)
+					local boost = 1 + (stacks * 0.05)
 					waitTime = waitTime / boost
 				end
 			end

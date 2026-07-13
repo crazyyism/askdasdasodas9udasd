@@ -13,6 +13,8 @@ local NOTIFICATION_DURATION = 5
 local MAX_NOTIFICATIONS = 5
 local STACK_PADDING = 5
 
+local startTime = os.clock()
+
 local function SetupUI()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui", 10)
@@ -84,6 +86,8 @@ end
 local activeNotifications = {}
 
 function NotifierController:Notify(text, color)
+	if os.clock() - startTime < 4 then return end -- Suppress notifications on initial join
+
 	if not isSetup or not container or not template then 
 		-- Try setup again if missing
 		SetupUI()

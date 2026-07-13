@@ -41,6 +41,9 @@ local function UpdateUI(settingsFrame)
 		{Key = "HighlightFish", Name = "Highlight Fish"},
 		{Key = "HideOtherFish", Name = "Hide Other Fish"},
 		{Key = "DisableSFX", Name = "Disable SFX"},
+		{Key = "HitboxVisualizer", Name = "Hitbox Visualizer"},
+		{Key = "DisableParallax", Name = "Disable UI Parallax"},
+		{Key = "DisableDynamicCamera", Name = "Disable Dynamic Camera"},
 		{Key = "UntilLegendary", Name = "Until Legendary"},
 		{Key = "UntilMythic", Name = "Until Mythic"},
 	}

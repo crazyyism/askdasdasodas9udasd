@@ -2,6 +2,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
 
+local FishConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("FishConfig"))
+
 return function(context)
 	local AbilityService = context.AbilityService
 	local HarvestService = context.HarvestService
@@ -46,9 +48,9 @@ return function(context)
 			if newExtraData[k] == nil then newExtraData[k] = v end
 		end
 	end
-	for _, entry in ipairs(abilityList) do
-		AbilityService.ExecuteAbility(player, fishIndex, entry.FishId, position, entry.AbilityName, newExtraData)
-	end
+	
+	local randomEntry = abilityList[math.random(1, #abilityList)]
+	AbilityService.ExecuteAbility(player, fishIndex, randomEntry.FishId, position, randomEntry.AbilityName, newExtraData)
 end
 
 

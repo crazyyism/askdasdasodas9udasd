@@ -254,18 +254,21 @@ DataUpdateEvent.OnClientEvent:Connect(function(data)
 		if anyChanges then
 			QuestController.UpdateQuestUI()
 		end
-	elseif data.AbilitiesCommitted ~= nil or data.SeaMinesPopped ~= nil then
-		-- AbilitiesCommitted/SeaMinesPopped changed without a full quest update —
-		-- still redraw so the ability counter in the quest bar reflects the new value.
+	elseif data.AbilitiesCommitted ~= nil or data.SeaMinesPopped ~= nil or data.Criticals ~= nil or data.MegaCriticals ~= nil then
+		-- Combat stats changed without a full quest update
+		-- still redraw so the counter in the quest bar reflects the new value.
 		local hasRelevantQuest = false
 		for qId, _ in pairs(activeQuests) do
 			local qCfg = QuestConfig.Quests[qId]
 			if qCfg and qCfg.Goals then
-				if qCfg.Goals["AbilitiesCommitted"] or qCfg.Goals["SeaMinesPopped"] then
-					hasRelevantQuest = true
-					break
+				for gKey, _ in pairs(qCfg.Goals) do
+					if gKey == "AbilitiesCommitted" or gKey == "SeaMinesPopped" or gKey == "Criticals" or gKey == "MegaCriticals" then
+						hasRelevantQuest = true
+						break
+					end
 				end
 			end
+			if hasRelevantQuest then break end
 		end
 		if hasRelevantQuest then
 			QuestController.UpdateQuestUI()
@@ -477,7 +480,7 @@ function QuestController.UpdateQuestUI()
 			for _, k in ipairs(keys) do
 				local g = config.Goals[k]
 				local c = progTable[k] or 0
-				if localData and (k == "AbilitiesCommitted" or k == "SeaMinesPopped" or k == "TokensGathered" or k == "BiomassTokensGathered" or k == "MaxAlgaePerSecond" or k == "EquipmentsPurchased") then c = localData[k] or 0 elseif k == "FishRequired" then local _c=0; for _,_ in pairs(localData.FishSchool or {}) do _c=_c+1 end; c = _c end
+				if localData and (k == "AbilitiesCommitted" or (type(k) == "string" and string.find(k, "SeaMinesPopped")) or k == "TokensGathered" or k == "BiomassTokensGathered" or k == "MaxAlgaePerSecond" or k == "EquipmentsPurchased") then c = localData[k] or 0 elseif k == "FishRequired" then local _c=0; for _,_ in pairs(localData.FishSchool or {}) do _c=_c+1 end; c = _c end
 				if c < g then allMet = false break end
 			end
 			
@@ -485,7 +488,7 @@ function QuestController.UpdateQuestUI()
 			for _, k in ipairs(keys) do
 				local goal = config.Goals[k]
 				local cur = progTable[k] or 0
-				if localData and (k == "AbilitiesCommitted" or k == "SeaMinesPopped" or k == "TokensGathered" or k == "BiomassTokensGathered" or k == "MaxAlgaePerSecond" or k == "EquipmentsPurchased") then cur = localData[k] or 0 elseif k == "FishRequired" then local _c=0; for _,_ in pairs(localData.FishSchool or {}) do _c=_c+1 end; cur = _c end
+				if localData and (k == "AbilitiesCommitted" or (type(k) == "string" and string.find(k, "SeaMinesPopped")) or k == "TokensGathered" or k == "BiomassTokensGathered" or k == "MaxAlgaePerSecond" or k == "EquipmentsPurchased") then cur = localData[k] or 0 elseif k == "FishRequired" then local _c=0; for _,_ in pairs(localData.FishSchool or {}) do _c=_c+1 end; cur = _c end
 				local pct = math.clamp(cur/goal, 0, 1)
 
 				local row = template:Clone()
@@ -511,7 +514,7 @@ function QuestController.UpdateQuestUI()
 							task.Text = "Collect " .. goal .. " " .. niceRes .. " from " .. loc .. "   " .. math.floor(cur) .. "/" .. goal
 						elseif k == "AbilitiesCommitted" then
 							task.Text = "Use abilities: " .. math.floor(cur) .. "/" .. goal
-						elseif k == "SeaMinesPopped" then
+						elseif type(k) == "string" and string.find(k, "SeaMinesPopped") then
 							task.Text = "Pop sea mines: " .. math.floor(cur) .. "/" .. goal
 						elseif k == "TokensGathered" then
 							task.Text = "Collect tokens: " .. math.floor(cur) .. "/" .. goal
@@ -639,14 +642,13 @@ end
 local function TokenizeDialogue(text)
 	local tokens = {}
 	
-	local styleStack = {
-		{
-			bold = false,
-			shake = false,
-			color = nil,
-			gradient = nil
-		}
-	}
+	local styleStack = {}
+	table.insert(styleStack, {
+		bold = false,
+		shake = false,
+		color = nil,
+		gradient = nil
+	})
 	
 	local function currentStyle()
 		return styleStack[#styleStack]

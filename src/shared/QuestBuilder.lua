@@ -110,7 +110,7 @@ local function generateQuests()
 		Rewards = %s,
 		Giver = "Elder Turtle"
 	},
-]], q, q:gsub("%u", " %1"):match("^%s*(.-)$"), goalsStr, rewardsStr)
+]], tostring(q), tostring(q:gsub("%u", " %1"):match("^%s*(.-)$")), tostring(goalsStr), tostring(rewardsStr))
 
         output = output .. questStr
     end
@@ -133,7 +133,7 @@ local function generateQuests()
 		Messages = {"Spectacular work as always. Let me prepare your next challenge."},
 		FinishQuestID = "%s"
 	},
-]], q, d.Dialog[1], d.Dialog[2] or "Good luck.", q, q, q, q)
+]], tostring(q), tostring(d.Dialog and d.Dialog[1] or ""), tostring(d.Dialog and d.Dialog[2] or "Good luck."), tostring(q), tostring(q), tostring(q), tostring(q))
         dOutput = dOutput .. dStr
     end
     

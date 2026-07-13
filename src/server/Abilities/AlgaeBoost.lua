@@ -15,7 +15,7 @@ return function(context)
 	local playerFishPositions = context.playerFishPositions
 
 	return  function(player, fishIndex, fishId, position, abilityConfig, multiplier, vfxOverride, extraData, data)
-	ApplyAlgaeBoost(player, fishId, extraData)
+	AbilityService.ApplyAlgaeBoost(player, fishId, extraData)
 end
 
 

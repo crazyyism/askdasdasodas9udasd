@@ -18,7 +18,7 @@ return function(context)
 	if abilityConfig.Buffs then
 		for _, buffName in ipairs(abilityConfig.Buffs) do AbilityService.ApplyBuff(player, buffName) end
 	end
-	VFXReplication:FireAllClients("Obsession", player, fishIndex, vfxOverride) -- Use generic buff vfx
+	VFXReplication:FireAllClients("ColorBoost", player, fishIndex, "Pink")
 end
 
 

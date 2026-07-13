@@ -10,22 +10,41 @@ local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local SecurityService = require(script.Parent.SecurityService)
 local FishService = require(script.Parent.FishService)
 local MobService = require(script.Parent.MobService)
+local HitboxCache = require(script.Parent.HitboxCache)
 
 local CapacityNotified = {} -- [userId] = clock()
 local CAPACITY_NOTIFY_COOLDOWN = 5
 
 local function getFieldFolder(fieldName)
 	if not fieldName then return nil end
+	
 	local folder = workspace:FindFirstChild(fieldName)
 	if folder then return folder end
 	
+	local reefsFolder = workspace:FindFirstChild("Reefs")
+	if reefsFolder then
+		folder = reefsFolder:FindFirstChild(fieldName)
+		if folder then return folder end
+	end
+	
 	local cleanName = string.lower(fieldName):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+	
 	for _, child in ipairs(workspace:GetChildren()) do
 		local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
 		if childClean == cleanName then
 			return child
 		end
 	end
+	
+	if reefsFolder then
+		for _, child in ipairs(reefsFolder:GetChildren()) do
+			local childClean = string.lower(child.Name):gsub("’", "'"):gsub("'", ""):gsub("%s+", "")
+			if childClean == cleanName then
+				return child
+			end
+		end
+	end
+	
 	return nil
 end
 
@@ -125,6 +144,13 @@ local function GetActiveQuests(data, player)
 				Config = QuestConfig.UpdateNoobieTurtle(data.NoobieTurtleQuestsCompleted or 0, fishCount, player.UserId, prog),
 				Progress = prog
 			}
+		elseif qId == "ElderTurtle" then
+			local fishCount = 0
+			for _ in pairs(data.FishSchool or {}) do fishCount = fishCount + 1 end
+			quests[qId] = {
+				Config = QuestConfig.UpdateElderTurtle(data.ElderTurtleQuestsCompleted or 0, fishCount, player.UserId, prog),
+				Progress = prog
+			}
 		else
 			local c = QuestConfig.Quests[qId]
 			if c then
@@ -187,7 +213,7 @@ local function GetAlgaeMultipliers(data, targetPart, consumeMark)
 		end
 	end
 	
-	return 1 + (baseBoost + percentBoost) * markMult * infectMult * reefMult
+	return (1 + baseBoost + percentBoost) * markMult * infectMult * reefMult
 end
 
 -- Helper: Get total critical power including bonuses
@@ -278,7 +304,7 @@ local function PercentageRandomizing(LootTable)
 				sum = sum + v
 			end
 
-			local r = math.random(sum)
+			local r = math.random() * sum
 			for k, v in pairs(WeightedLootTable) do
 				r = r - v
 				if r <= 0 then
@@ -587,7 +613,7 @@ local function TriggerPassive(player, fishIndex, fishConfig, centerPart)
 			-- Optimization: Search in same parent folder (Field)
 			local field = centerPart.Parent
 			if field then
-				for _, part in ipairs(field:GetChildren()) do
+				for _, part in ipairs(field:GetDescendants()) do
 					if part:IsA("BasePart") and part:FindFirstChild("Capacity") then
 						if (part.Position - centerPos).Magnitude <= radius then
 							ApplyAlgaeMark(part, duration)
@@ -607,7 +633,7 @@ local function TriggerPassive(player, fishIndex, fishConfig, centerPart)
 			
 			local field = centerPart.Parent
 			if field then
-				for _, part in ipairs(field:GetChildren()) do
+				for _, part in ipairs(field:GetDescendants()) do
 					if part:IsA("BasePart") and part:FindFirstChild("Capacity") then
 						if (part.Position - centerPos).Magnitude <= radius then
 							if (part:GetAttribute("AlgaeMarkEnd") or 0) > os.time() then
@@ -715,9 +741,12 @@ local function ProcessHarvestData(player, data, targetPart, unitValue, actualBur
 		end
 	end
 	
-	-- CLAMP removed: Allow math.floor to legally overshoot the limit on the hit that breaks it!
-	if bagIsFull then
-		finalAmount = 0
+	-- Strict Clamp: Prevent overfilling!
+	if totalPlankton + finalAmount > data.MaxCapacity then
+		finalAmount = math.max(0, data.MaxCapacity - totalPlankton)
+		if finalAmount <= 0 then
+			NotifyCapacityFull(player)
+		end
 	end
 
 	-- Quest Update (Use gross amount before conversion)
@@ -890,7 +919,10 @@ local function ExecuteHarvestBatch(player, parts, toolStats, skipVisual, consoli
 		if cachedData.Plankton then for _, c in pairs(cachedData.Plankton) do total += c end end
 		local capMult = (cachedData.Stats and cachedData.Stats.CapacityMultiplier) or 1.0
 		local effectiveMax = math.floor(cachedData.MaxCapacity * capMult)
-		if total >= effectiveMax then return end 
+		if total >= effectiveMax then
+			NotifyCapacityFull(player)
+			return
+		end 
 	end
 
 	PlayerData.update(player, function(data)
@@ -1218,7 +1250,7 @@ BeatHarvestEvent.OnServerEvent:Connect(function(player)
 	for fieldName, _ in pairs(ResourceConfig.Fields) do
 		local field = getFieldFolder(fieldName)
 		if field then
-			for _, part in ipairs(field:GetChildren()) do
+			for _, part in ipairs(field:GetDescendants()) do
 				if part:IsA("BasePart") then
 					local cap = part:FindFirstChild("Capacity")
 					if cap and cap.Value > 0 then
@@ -1273,6 +1305,14 @@ function HarvestService.OnHarvest(player, arg)
 	
 	local allowedRange = toolStats.HarvestRadius or HARVEST_DISTANCE
 	local activeCooldown = toolStats.Cooldown or BASE_COOLDOWN
+	
+	local pData = PlayerData.get(player)
+	local currentToolSpeed = (pData and pData.Stats and pData.Stats.ToolSpeed) or 1
+	
+
+	
+	activeCooldown = activeCooldown / currentToolSpeed
+	
 	local now = os.clock()
 	local cdData = playerCooldowns[player.UserId] or { LastTime = 0 }
 	
@@ -1330,7 +1370,7 @@ function HarvestService.OnHarvest(player, arg)
 			local fieldFolder = targetPart.Parent
 			
 			if fieldFolder then
-				for _, p in ipairs(fieldFolder:GetChildren()) do
+				for _, p in ipairs(fieldFolder:GetDescendants()) do
 					if p:IsA("BasePart") then
 						local cap = p:FindFirstChild("Capacity")
 						local aa = p:FindFirstChild("AlgaeAmount")
@@ -1390,7 +1430,7 @@ function HarvestService.OnHarvest(player, arg)
 					local fieldFolder = targetPart.Parent
 					
 					if fieldFolder then
-						for _, p in ipairs(fieldFolder:GetChildren()) do
+						for _, p in ipairs(fieldFolder:GetDescendants()) do
 							if p:IsA("BasePart") and p ~= targetPart and not table.find(targets, p) then
 								local cap = p:FindFirstChild("Capacity")
 								local aa = p:FindFirstChild("AlgaeAmount")
@@ -1410,7 +1450,9 @@ function HarvestService.OnHarvest(player, arg)
 		end
 		
 		-- Execute Batch for Pattern
-		if #targets > 0 then
+		if #targets > 1 then
+			HarvestService.HarvestMultipleBatched(player, targets, toolStats.CapacityBurn or 1)
+		elseif #targets == 1 then
 			ExecuteHarvest(player, targets, toolStats)
 		end
 	end
@@ -1427,7 +1469,7 @@ function HarvestService.OnHarvest(player, arg)
 		local avgLevel = MobService.GetAverageFishLevel(player)
 		
 		if toolName == "SharkScythe" or toolName == "Shark Scythe" then
-			local finalDamage = 30 * playerAttack
+			local finalDamage = (ToolConfig["SharkScythe"].MobDamage or 30) * playerAttack
 			local isCrit = false
 			if math.random() <= megaCritChance then
 				isCrit = true; finalDamage = finalDamage * megaCritPower
@@ -1435,9 +1477,19 @@ function HarvestService.OnHarvest(player, arg)
 				isCrit = true; finalDamage = finalDamage * critPower
 			end
 			
+			local VFXReplication = game.ReplicatedStorage:FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("VFXReplication")
+			if VFXReplication then
+				VFXReplication:FireAllClients("SharkScythe", player, nil, nil)
+				if pd and pd.Settings and pd.Settings.HitboxVisualizer then
+					VFXReplication:FireClient(player, "HitboxVisualizer", nil, nil, {Position = root.Position, Size = 15, Shape = "Sphere", Duration = 0.5})
+				end
+			end
+			
 			for _, mobData in ipairs(MobService.GetMobs()) do
 				if mobData.Mob and mobData.Mob.PrimaryPart then
-					if (mobData.Mob.PrimaryPart.Position - root.Position).Magnitude <= 15 then
+					local mPos = Vector3.new(mobData.Mob.PrimaryPart.Position.X, 0, mobData.Mob.PrimaryPart.Position.Z)
+					local pPos = Vector3.new(root.Position.X, 0, root.Position.Z)
+					if (mPos - pPos).Magnitude <= 15 then
 						local mobLevel = mobData.Mob:FindFirstChild("Level") and mobData.Mob.Level.Value or 1
 						local missChance = 0
 						if mobLevel - avgLevel > 0 then missChance = 1 - math.pow(0.5, mobLevel - avgLevel) end
@@ -1446,7 +1498,7 @@ function HarvestService.OnHarvest(player, arg)
 				end
 			end
 		elseif toolName == "Crystiken" then
-			local finalDamage = 5 * playerAttack
+			local finalDamage = (ToolConfig["Crystiken"].MobDamage or 5) * playerAttack
 			local isCrit = false
 			if math.random() <= megaCritChance then
 				isCrit = true; finalDamage = finalDamage * megaCritPower
@@ -1457,7 +1509,9 @@ function HarvestService.OnHarvest(player, arg)
 			for _, mobData in ipairs(MobService.GetMobs()) do
 				if mobData.Mob and mobData.Mob.PrimaryPart then
 					-- Crystiken has 20 range, we use 25 for safe measure against ping
-					if (mobData.Mob.PrimaryPart.Position - root.Position).Magnitude <= 25 then
+					local mPos = Vector3.new(mobData.Mob.PrimaryPart.Position.X, 0, mobData.Mob.PrimaryPart.Position.Z)
+					local pPos = Vector3.new(root.Position.X, 0, root.Position.Z)
+					if (mPos - pPos).Magnitude <= 25 then
 						local mobLevel = mobData.Mob:FindFirstChild("Level") and mobData.Mob.Level.Value or 1
 						local missChance = 0
 						if mobLevel - avgLevel > 0 then missChance = 1 - math.pow(0.5, mobLevel - avgLevel) end
@@ -1574,7 +1628,7 @@ local function ProcessFishHarvest(player, fishIndex, targetPart, isRecursiveCall
 			
 			if forcedMegaCrit and not isRecursiveCall then
 				local fieldFolder = targetPart.Parent
-				for _, child in ipairs(fieldFolder:GetChildren()) do
+				for _, child in ipairs(fieldFolder:GetDescendants()) do
 					if child:IsA("BasePart") and child ~= targetPart then
 						if (child.Position - targetPart.Position).Magnitude <= harvestRadius then
 							task.spawn(function()
@@ -1875,32 +1929,88 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 			local f = getFieldFolder(fieldName)
 			if f then table.insert(filterFolders, f) end
 		end
+		
+		local mobsFolder = workspace:FindFirstChild("Mobs")
+		if mobsFolder then table.insert(filterFolders, mobsFolder) end
+		
 		overlapParams.FilterDescendantsInstances = filterFolders
 		
-		local parts = workspace:GetPartBoundsInRadius(rootCF.Position, 30, overlapParams)
+		local parts = workspace:GetPartBoundsInRadius(rootCF.Position, 20, overlapParams)
 		local algaeTargets = {}
 		local visualTargets = {}
+		local mobTargets = {}
 		local hitList = {}
 		local visualHitList = {}
+		local mobHitList = {}
 		
 		for _, p in ipairs(parts) do
-			if p:IsA("BasePart") and p.Name:match("Algae") then
-				if not visualHitList[p] then
-					table.insert(visualTargets, p)
-					visualHitList[p] = true
-				end
-				
-				if not hitList[p] then
-					local cap = p:FindFirstChild("Capacity")
-					if cap and cap.Value > 0 then
-						table.insert(algaeTargets, p)
-						hitList[p] = true
+			if p:IsA("BasePart") then
+				if p.Name:match("Algae") then
+					if not visualHitList[p] then
+						table.insert(visualTargets, p)
+						visualHitList[p] = true
+					end
+					
+					if not hitList[p] then
+						local cap = p:FindFirstChild("Capacity")
+						if cap and cap.Value > 0 then
+							table.insert(algaeTargets, p)
+							hitList[p] = true
+						end
+					end
+				else
+					local model = p:FindFirstAncestorWhichIsA("Model")
+					if model and model.Parent == mobsFolder and p == model.PrimaryPart then
+						if not visualHitList[model] then
+							table.insert(visualTargets, p)
+							visualHitList[model] = true
+						end
+						
+						if not mobHitList[model] then
+							table.insert(mobTargets, model)
+							mobHitList[model] = true
+						end
 					end
 				end
 			end
 		end
+		
 		if #algaeTargets > 0 then
 			HarvestService.HarvestMultipleBatched(player, algaeTargets, 20)
+		end
+		
+		if #mobTargets > 0 then
+			local MobService = require(script.Parent.MobService)
+			local pd = PlayerData.get(player)
+			local playerAttack = (pd and pd.Stats and pd.Stats.Attack) or 1
+			local critChance = (pd and pd.Stats and pd.Stats.CriticalChance) or 0.01
+			local critPower = (pd and pd.Stats and pd.Stats.CriticalPower) or 3.0
+			local megaCritChance = (pd and pd.Stats and pd.Stats.MegaCritChance) or 0
+			local megaCritPower = (pd and pd.Stats and pd.Stats.MegaCritPower) or 10.0
+			
+			local avgLevel = MobService.GetAverageFishLevel(player)
+			local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+			local baseDamage = (ToolConfig["Sunkissed Art"].SunWrathInitialDamage or 400) * playerAttack * math.max(1, avgLevel)
+			
+			if pd and pd.Settings and pd.Settings.HitboxVisualizer then
+				VFXReplication:FireClient(player, "HitboxVisualizer", nil, nil, {Position = rootCF.Position, Size = 20, Shape = "Sphere", Duration = 1.0})
+			end
+			
+			for _, mobModel in ipairs(mobTargets) do
+				local finalDamage = baseDamage
+				local isCrit = false
+				if math.random() <= megaCritChance then
+					isCrit = true; finalDamage = finalDamage * megaCritPower
+				elseif math.random() <= critChance then
+					isCrit = true; finalDamage = finalDamage * critPower
+				end
+				
+				local mobLevel = mobModel:FindFirstChild("Level") and mobModel.Level.Value or 1
+				local missChance = 0
+				if mobLevel - avgLevel > 0 then missChance = 1 - math.pow(0.5, mobLevel - avgLevel) end
+				
+				MobService.DamageMob(mobModel, finalDamage, isCrit, math.random() < missChance, player)
+			end
 		end
 		
 		-- "spawn Solar Flares ANYWHERE IN THE REEF if there are reefs in proximity"
@@ -1920,11 +2030,13 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 				
 				local vfxOverride = {Color = Color3.fromRGB(255, 80, 0), ForceOverride = true}
 				for _, pos in ipairs(selectedPositions) do
-					AbilityService.ExecuteSolarFlare(player, rootCF.Position, 1.0, {
+					local extraData = {
 						TargetPos = pos,
 						MoveTime = 0.8,
-						OutwardOnly = true
-					}, vfxOverride)
+						OutwardOnly = true,
+						DamageOverride = ToolConfig["Sunkissed Art"].AbilityDamage or 30
+					}
+					AbilityService.ExecuteSolarFlare(player, rootCF.Position, 1.0, extraData, vfxOverride)
 					task.wait(0.15)
 				end
 			end)
@@ -1949,7 +2061,11 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 		
 		local pd = data
 		local playerAttack = (pd and pd.Stats and pd.Stats.Attack) or 1
-		local finalDamage = 20 * playerAttack
+		local finalDamage = (ToolConfig["Sunkissed Art"].MobDamage or 20) * playerAttack
+		
+		local MobService = require(script.Parent.MobService)
+		local avgLevel = MobService.GetAverageFishLevel(player)
+		finalDamage = finalDamage * math.max(1, avgLevel)
 		
 		local critChance = (pd and pd.Stats and pd.Stats.CriticalChance) or 0.01
 		local critPower = (pd and pd.Stats and pd.Stats.CriticalPower) or 3.0
@@ -1965,11 +2081,17 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 			finalDamage = finalDamage * critPower
 		end
 		
+		local hitCenter = root.Position + (root.CFrame.LookVector * 15)
+		
+		if pd.Settings and pd.Settings.HitboxVisualizer then
+			VFXReplication:FireClient(player, "HitboxVisualizer", nil, nil, {Position = hitCenter, Size = 15, Shape = "Sphere", Duration = 1.0})
+		end
+		
 		local MobService = require(script.Parent.MobService)
 		local avgLevel = MobService.GetAverageFishLevel(player)
 		for _, mobData in ipairs(MobService.GetMobs()) do
 			if mobData.Mob and mobData.Mob.PrimaryPart then
-				if (mobData.Mob.PrimaryPart.Position - root.Position).Magnitude <= 15 then
+				if (mobData.Mob.PrimaryPart.Position - hitCenter).Magnitude <= 15 then
 					local mobLevel = mobData.Mob:FindFirstChild("Level") and mobData.Mob.Level.Value or 1
 					local levelDiff = mobLevel - avgLevel
 					local missChance = 0
@@ -2054,7 +2176,7 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 				lastDamageTick = now
 				local pd = PlayerData.get(player)
 				local playerAttack = (pd and pd.Stats and pd.Stats.Attack) or 1
-				local finalDamage = 10 * playerAttack
+				local finalDamage = (ToolConfig["Sunkissed Art"].OrbTickDamage or 10) * playerAttack
 				
 				local critChance = (pd and pd.Stats and pd.Stats.CriticalChance) or 0.01
 				local critPower = (pd and pd.Stats and pd.Stats.CriticalPower) or 3.0
@@ -2068,6 +2190,10 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 				elseif math.random() <= critChance then
 					isCrit = true
 					finalDamage = finalDamage * critPower
+				end
+				
+				if pd and pd.Settings and pd.Settings.HitboxVisualizer then
+					VFXReplication:FireClient(player, "HitboxVisualizer", nil, nil, {Position = orb.Position, Size = 12, Shape = "Sphere", Duration = 0.2})
 				end
 				
 				local MobService = require(script.Parent.MobService)
@@ -2137,7 +2263,10 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 				local megaCritPower = (pd and pd.Stats and pd.Stats.MegaCritPower) or 10.0
 				
 				local isCrit = false
-				local finalDamage = playerAttack * 2 -- Sunkissed orb might do more damage since it's a big explosion
+				
+				local MobService = require(script.Parent.MobService)
+				local avgLevel = MobService.GetAverageFishLevel(player)
+				local finalDamage = (playerAttack * (ToolConfig["Sunkissed Art"].ExplosionDamage or 2)) * math.max(1, avgLevel) -- Sunkissed orb might do more damage since it's a big explosion
 				
 				if math.random() <= megaCritChance then
 					isCrit = true
@@ -2145,6 +2274,10 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 				elseif math.random() <= critChance then
 					isCrit = true
 					finalDamage = finalDamage * critPower
+				end
+				
+				if pd and pd.Settings and pd.Settings.HitboxVisualizer then
+					VFXReplication:FireClient(player, "HitboxVisualizer", nil, nil, {Position = orb.Position, Size = 12, Shape = "Sphere", Duration = 1.0})
 				end
 				
 				local MobService = require(script.Parent.MobService)
@@ -2241,12 +2374,7 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 	end)
 
     PoseidonWaveEvent.OnServerEvent:Connect(function(player, startCF)
-		-- 1. Cooldown Check
-		local now = os.time()
-		if (PoseidonCooldowns[player.UserId] or 0) > now then return end
-		PoseidonCooldowns[player.UserId] = now + 1 -- 1 second cooldown
-
-		-- 2. Tool & Data Validation
+		-- 1. Data Validation
 		local data = PlayerData.get(player)
 		if not data then return end
 		
@@ -2254,6 +2382,16 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 		if data.EquippedTool ~= "Poseidon" then
 			return
 		end
+		
+		-- 2. Cooldown Check
+		local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+		local activeCooldown = ToolConfig["Poseidon"].Cooldown or 0.6
+		local currentToolSpeed = (data.Stats and data.Stats.ToolSpeed) or 1
+		activeCooldown = activeCooldown / currentToolSpeed
+		
+		local now = os.clock()
+		if (PoseidonCooldowns[player.UserId] or 0) > now then return end
+		PoseidonCooldowns[player.UserId] = now + math.max(0.05, activeCooldown * 0.8) -- Permissive to account for ping
 
 		-- Validation: Distance check
 		if not player.Character or not player.Character.PrimaryPart then return end
@@ -2263,106 +2401,111 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 		local dist = (player.Character.PrimaryPart.Position - startCF.Position).Magnitude
 		if dist > 20 then return end -- Too far (increased from 15 to allow slight lag leniency)
 		
-		-- Fire Visuals to ALL clients 
-		if VFXReplication then
-			VFXReplication:FireAllClients("Wave", player, nil, {StartCFrame = startCF})
+		local AbilityService = require(script.Parent.AbilityService)
+		local tidalSurgeStacks = AbilityService.GetBuffStacks(player, "TidalSurge")
+		
+		local waveCFs = {startCF}
+		if tidalSurgeStacks >= 200 then
+			table.insert(waveCFs, startCF * CFrame.Angles(0, math.rad(45), 0))
+			table.insert(waveCFs, startCF * CFrame.Angles(0, math.rad(-45), 0))
 		end
 		
-		-- Server Hitbox Logic
-		local hitbox = Instance.new("Part")
-		hitbox.Size = Vector3.new(20, 8, 20)
-		hitbox.Anchored = true
-		hitbox.CanCollide = false
-		hitbox.Transparency = 1
-		hitbox.Name = "PoseidonHitbox"
-		hitbox.Parent = workspace
-		
-		local hitList = {} -- Debounce per wave
-		local startTime = os.clock()
-		local duration = 2
-		local speed = 40
-		
-		local RunService = game:GetService("RunService")
-		local connection
-		
-		connection = RunService.Heartbeat:Connect(function()
-			if not hitbox or not hitbox.Parent then 
-				if connection then connection:Disconnect() end
-				return 
+		for _, waveCF in ipairs(waveCFs) do
+			-- Fire Visuals to ALL clients 
+			if VFXReplication then
+				VFXReplication:FireAllClients("Wave", player, nil, {StartCFrame = waveCF})
 			end
 			
-			local elapsed = os.clock() - startTime
-			if elapsed > duration then
-				if connection then connection:Disconnect() end
-				hitbox:Destroy()
-				return
-			end
+			-- Server Hitbox Logic (Math only, no physical part to prevent replication lag)
+			local hitboxSize = Vector3.new(35, 12, 35)
 			
-			-- Throttle: Only check every 0.1s
-			local checkInterval = 0.1
-			local lastCheck = hitbox:GetAttribute("LastCheck") or 0
+			local hitList = {} -- Debounce per wave
+			local startTime = os.clock()
+			local duration = 2
+			local speed = 40
+			local lastCheck = 0
 			
-			-- Move Hitbox always (smoothness)? 
-			-- Actually for server hitbox validation, updating position every 0.1s before check is fine.
-			-- If we move it every frame but only check every 0.1s, that's better.
+			local RunService = game:GetService("RunService")
+			local connection
 			
-			-- Move Hitbox
-			hitbox.CFrame = startCF * CFrame.new(0, 0, -elapsed * speed)
-			
-			if (elapsed - lastCheck) < checkInterval then return end
-			hitbox:SetAttribute("LastCheck", elapsed)
-			
-			local MobService = require(script.Parent.MobService)
-			local pd = PlayerData.get(player)
-			if pd and pd.Stats then
-				local playerAttack = pd.Stats.Attack or 1
-				local finalDamage = 7 * playerAttack
-				local critChance = pd.Stats.CriticalChance or 0.01
-				local critPower = pd.Stats.CriticalPower or 3.0
-				local megaCritChance = pd.Stats.MegaCritChance or 0
-				local megaCritPower = pd.Stats.MegaCritPower or 10.0
-				local avgLevel = MobService.GetAverageFishLevel(player)
-				
-				local isCrit = false
-				if math.random() <= megaCritChance then
-					isCrit = true; finalDamage = finalDamage * megaCritPower
-				elseif math.random() <= critChance then
-					isCrit = true; finalDamage = finalDamage * critPower
+			connection = RunService.Heartbeat:Connect(function()
+				local elapsed = os.clock() - startTime
+				if elapsed > duration then
+					if connection then connection:Disconnect() end
+					return
 				end
 				
-				for _, mobData in ipairs(MobService.GetMobs()) do
-					if mobData.Mob and mobData.Mob.PrimaryPart then
-						if (mobData.Mob.PrimaryPart.Position - hitbox.Position).Magnitude <= 15 then
-							local mobLevel = mobData.Mob:FindFirstChild("Level") and mobData.Mob.Level.Value or 1
-							local missChance = 0
-							if mobLevel - avgLevel > 0 then missChance = 1 - math.pow(0.5, mobLevel - avgLevel) end
-							MobService.DamageMob(mobData.Mob, finalDamage, isCrit, math.random() < missChance, player)
+				-- Throttle: Only check every 0.1s
+				local checkInterval = 0.1
+				if (elapsed - lastCheck) < checkInterval then return end
+				lastCheck = elapsed
+				
+				-- Calculate current CFrame mathematically
+				local currentCFrame = waveCF * CFrame.new(0, 0, -elapsed * speed)
+				
+				local MobService = require(script.Parent.MobService)
+				local pd = PlayerData.get(player)
+				if pd and pd.Stats then
+					local playerAttack = pd.Stats.Attack or 1
+					local finalDamage = (ToolConfig["Poseidon"].MobDamage or 7) * playerAttack
+					local critChance = pd.Stats.CriticalChance or 0.01
+					local critPower = pd.Stats.CriticalPower or 3.0
+					local megaCritChance = pd.Stats.MegaCritChance or 0
+					local megaCritPower = pd.Stats.MegaCritPower or 10.0
+					local avgLevel = MobService.GetAverageFishLevel(player)
+					
+					finalDamage = finalDamage * math.max(1, avgLevel)
+					
+					local isCrit = false
+					if math.random() <= megaCritChance then
+						isCrit = true; finalDamage = finalDamage * megaCritPower
+					elseif math.random() <= critChance then
+						isCrit = true; finalDamage = finalDamage * critPower
+					end
+					
+					for _, mobData in ipairs(MobService.GetMobs()) do
+						if mobData.Mob and mobData.Mob.PrimaryPart then
+							if (mobData.Mob.PrimaryPart.Position - currentCFrame.Position).Magnitude <= 15 then
+								local mobLevel = mobData.Mob:FindFirstChild("Level") and mobData.Mob.Level.Value or 1
+								local missChance = 0
+								if mobLevel - avgLevel > 0 then missChance = 1 - math.pow(0.5, mobLevel - avgLevel) end
+								MobService.DamageMob(mobData.Mob, finalDamage, isCrit, math.random() < missChance, player)
+							end
 						end
 					end
 				end
-			end
-			
-			-- Detect Algae
-		local parts = workspace:GetPartsInPart(hitbox)
-		local algaeTargets = {}
-		
-		
-		for _, p in ipairs(parts) do
-			if not hitList[p] and p.Name:match("Algae") then
-				-- Validate it's a resource field part
-				local field = p.Parent
-				if field and GetFieldConfig(field.Name) then
-					hitList[p] = true
-					table.insert(algaeTargets, p)
+				
+				-- Detect Algae
+				local overlapParams = OverlapParams.new()
+				overlapParams.FilterType = Enum.RaycastFilterType.Include
+				local filterFolders = {}
+				for fieldName, _ in pairs(ResourceConfig.Fields) do
+					local f = getFieldFolder(fieldName)
+					if f then table.insert(filterFolders, f) end
 				end
-			end
+				overlapParams.FilterDescendantsInstances = filterFolders
+				
+				local parts = workspace:GetPartBoundsInBox(currentCFrame, hitboxSize, overlapParams)
+				local algaeTargets = {}
+				
+				
+				for _, p in ipairs(parts) do
+					if not hitList[p] and p.Name:match("Algae") then
+						-- Validate it's a resource field part
+						local field = p.Parent
+						if field and GetFieldConfig(field.Name) then
+							hitList[p] = true
+							table.insert(algaeTargets, p)
+						end
+					end
+				end
+				
+				-- Use batched harvest helper (auto-batches by color, reduces lag)
+				if #algaeTargets > 0 then
+					HarvestService.HarvestMultipleBatched(player, algaeTargets, 5)
+				end
+			end)
 		end
-		
-		-- Use batched harvest helper (auto-batches by color, reduces lag)
-		if #algaeTargets > 0 then
-			HarvestService.HarvestMultipleBatched(player, algaeTargets, 5)
-		end
-		end)
 	end)
 	
 	local RainmakerBulletDamageEvent = Remotes:FindFirstChild("RainmakerBulletDamageEvent")
@@ -2386,7 +2529,7 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 		local MobService = require(script.Parent.MobService)
 		local pd = data
 		local playerAttack = (pd and pd.Stats and pd.Stats.Attack) or 1
-		local finalDamage = 5 * playerAttack
+		local finalDamage = (ToolConfig["Rainmaker"].MobDamage or 5) * playerAttack
 		
 		local critChance = (pd and pd.Stats and pd.Stats.CriticalChance) or 0.01
 		local critPower = (pd and pd.Stats and pd.Stats.CriticalPower) or 3.0
@@ -2402,9 +2545,14 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 		
 		local avgLevel = MobService.GetAverageFishLevel(player)
 		if (targetPart.Position - root.Position).Magnitude <= 100 then
+			if pd and pd.Settings and pd.Settings.HitboxVisualizer then
+				VFXReplication:FireClient(player, "HitboxVisualizer", nil, nil, {Position = targetPart.Position, Size = 5, Shape = "Sphere", Duration = 0.5})
+			end
 			local mobLevel = mobModel:FindFirstChild("Level") and mobModel.Level.Value or 1
 			local missChance = 0
 			if mobLevel - avgLevel > 0 then missChance = 1 - math.pow(0.5, mobLevel - avgLevel) end
+			
+			finalDamage = finalDamage * math.max(1, avgLevel)
 			MobService.DamageMob(mobModel, finalDamage, isCrit, math.random() < missChance, player)
 		end
 	end)
@@ -2419,7 +2567,12 @@ local PoseidonCooldowns = {} -- [UserId] = nextTime
 	end
 
 	PoseidonFishHitEvent.OnServerEvent:Connect(function(player, fishIndex)
-		-- Conversion removed as per request
+		local data = PlayerData.get(player)
+		if data and data.EquippedTool == "Poseidon" then
+			-- Grant Tidal Surge buff when a wave hits a fish
+			local AbilityService = require(script.Parent.AbilityService)
+			AbilityService.ApplyBuff(player, "TidalSurge")
+		end
 	end)
 
 
@@ -2549,7 +2702,7 @@ function HarvestService.HarvestMultipleBatched(player, targets, amountPerTarget,
 			-- Backpack Clamp
 			local currentPl = 0; for _,v in pairs(data.Plankton) do currentPl += v end
 			local spaceLeft = data.MaxCapacity - currentPl
-			finalToBackpack = math.min(finalToBackpack, spaceLeft)
+			finalToBackpack = math.max(0, math.min(finalToBackpack, spaceLeft))
 			
 			local combinedGross = finalToBackpack + bioGained
 			
@@ -2720,6 +2873,7 @@ Players.PlayerAdded:Connect(function(player)
 			-- Check if already has it
 			local existingTool = player.Backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName)
 			if existingTool then
+				existingTool.CanBeDropped = false
 				local humanoid = char:FindFirstChild("Humanoid")
 				if existingTool.Parent == player.Backpack and humanoid then
 					task.delay(0.1, function()
@@ -2736,6 +2890,7 @@ Players.PlayerAdded:Connect(function(player)
 			
 			if toolModel then
 				local clone = toolModel:Clone()
+				clone.CanBeDropped = false
 				clone.Parent = player.Backpack
 				
 				-- Ensure the tool is physically equipped when they spawn
@@ -3013,7 +3168,7 @@ function HarvestService.RefillTarget(player, targetPart, amount)
 		-- If full, we still allow refill but maybe no loot? 
 		-- "should get the amount... from each algae being refilled"
 		-- If backpack full, they get nothing.
-		local finalYield = math.min(yield, space)
+		local finalYield = math.max(0, math.min(yield, space))
 		
 		if finalYield > 0 then
 			local convRate = data.Stats.InstantConversion or 0

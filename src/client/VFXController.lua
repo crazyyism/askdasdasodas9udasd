@@ -2,9 +2,30 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
 
-local FishController = require(script.Parent.FishController)
+local FishController = nil -- Lazy load
+
+local PartCache = require(ReplicatedStorage:WaitForChild("PartCache", 10):WaitForChild("PartCache", 10))
+local anchorTemplate = Instance.new("Part")
+anchorTemplate.Name = "VFXAnchor"
+anchorTemplate.Transparency = 1
+anchorTemplate.Size = Vector3.new(0.5, 0.5, 0.5)
+anchorTemplate.CanCollide = false
+anchorTemplate.Anchored = true
+anchorTemplate.Massless = true
+
+local anchorCache = PartCache.new(anchorTemplate, 200)
 
 local VFXController = {}
+
+function VFXController.GetAnchor()
+	return anchorCache:GetPart()
+end
+
+function VFXController.ReturnAnchor(anchor)
+	if anchor and anchor.Parent then
+		anchorCache:ReturnPart(anchor)
+	end
+end
 
 local rainmakerStates = {}
 local activeBlackHoles = {} -- [Player] = Sphere Instance
@@ -678,7 +699,7 @@ function VFXController.PlayGuardianVFX(player, hrp, movetype)
 
 		-- Position guardian behind the player
 		local playerCFrame = hrp.CFrame
-		local behindOffset = playerCFrame.LookVector * -20 -- 20 studs behind player
+		local behindOffset = playerCFrame.LookVector * -35 -- 35 studs behind player
 		local spawnPosition = hrp.Position + behindOffset
 
 		spawnPosition = Vector3.new(spawnPosition.X, spawnPosition.Y + 3, spawnPosition.Z)
@@ -1650,15 +1671,12 @@ function VFXController.PlaySanctuaryBullets(targetPlayer, customData)
 	-- Play Spirallusion Spawn SFX at startPos
 	local spawnSfx = illusionaryFishFolder:FindFirstChild("Spawn")
 	if spawnSfx then
-		local anchor = Instance.new("Part")
-		anchor.Size = Vector3.new(0.1, 0.1, 0.1)
-		anchor.Transparency = 1
-		anchor.Anchored = true
-		anchor.CanCollide = false
+		local anchor = VFXController.GetAnchor()
 		anchor.Position = startPos
-		anchor.Parent = workspace.Terrain
+		anchor.Parent = workspace
 		Debris:AddItem(anchor, 5)
 		PlaySFX(spawnSfx, anchor)
+		task.delay(5, function() VFXController.ReturnAnchor(anchor) end)
 	end
 	
 	for i = 1, count do
@@ -1672,18 +1690,14 @@ function VFXController.PlaySanctuaryBullets(targetPlayer, customData)
 			local bullet = bulletTemplate:Clone()
 			
 			if bullet:IsA("Attachment") then
-				local carrier = Instance.new("Part")
+				local carrier = VFXController.GetAnchor()
 				carrier.Name = "BulletCarrier"
-				carrier.Transparency = 1
-				carrier.Size = Vector3.new(0.5,0.5,0.5)
-				carrier.CanCollide = false
-				carrier.Anchored = true
 				carrier.Position = startPos
-				carrier.Parent = workspace.Terrain
+				carrier.Parent = workspace
 				bullet.Parent = carrier
 				bullet = carrier
 			else
-				bullet.Parent = workspace.Terrain
+				bullet.Parent = workspace
 				bullet.CFrame = CFrame.new(startPos)
 				bullet.Anchored = true
 				bullet.CanCollide = false
@@ -1725,29 +1739,34 @@ function VFXController.PlaySanctuaryBullets(targetPlayer, customData)
 				
 				if t >= 1 then
 					connection:Disconnect()
-					bullet:Destroy()
+					if bullet.Name == "BulletCarrier" then
+						bullet:ClearAllChildren()
+						VFXController.ReturnAnchor(bullet)
+					else
+						bullet:Destroy()
+					end
 					
 					-- Explosion
-					local anchor = Instance.new("Part")
-					anchor.Size = Vector3.new(0.1, 0.1, 0.1)
-					anchor.Transparency = 1
-					anchor.Anchored = true
-					anchor.CanCollide = false
+					local anchor = VFXController.GetAnchor()
 					anchor.Position = endPos
-					anchor.Parent = workspace.Terrain
-					Debris:AddItem(anchor, 2)
+					anchor.Parent = workspace
 					
 					local newAtt = spawnAttTemplate:Clone()
 					newAtt.Parent = anchor
 					for _, child in ipairs(newAtt:GetChildren()) do
 						if child:IsA("ParticleEmitter") then
-							local emitCount = child:GetAttribute("emitcount") or 10
+							local emitCount = child:GetAttribute("EmitCount") or 10
 							child:Emit(emitCount)
 						end
 					end
 					
 					if expl1 then PlaySFX(expl1, anchor) end
 					if expl2 then PlaySFX(expl2, anchor) end
+					
+					task.delay(2, function()
+						newAtt:Destroy()
+						VFXController.ReturnAnchor(anchor)
+					end)
 				end
 			end)
 		end)
@@ -1878,6 +1897,42 @@ function VFXController.Start()
 	
 	if VFXReplication then
 		VFXReplication.OnClientEvent:Connect(function(vfxName, targetPlayer, targetIndex, customData, extraData, extraData2)
+			if vfxName == "HitboxVisualizer" then
+				if localData and localData.Settings and localData.Settings.HitboxVisualizer then
+					local shape = customData.Shape or "Sphere"
+					local part = Instance.new("Part")
+					part.Anchored = true
+					part.CanCollide = false
+					part.Massless = true
+					part.CastShadow = false
+					part.Material = Enum.Material.Neon
+					part.Color = Color3.fromRGB(255, 0, 0)
+					part.Transparency = 0.7
+					
+					if shape == "Sphere" then
+						part.Shape = Enum.PartType.Ball
+						local d = (customData.Size or 15) * 2
+						part.Size = Vector3.new(d, d, d)
+						if customData.CFrame then
+							part.CFrame = customData.CFrame
+						else
+							part.Position = customData.Position
+						end
+					elseif shape == "Box" then
+						part.Shape = Enum.PartType.Block
+						part.Size = customData.Size
+						if customData.CFrame then
+							part.CFrame = customData.CFrame
+						else
+							part.Position = customData.Position
+						end
+					end
+					
+					part.Parent = workspace
+					game:GetService("Debris"):AddItem(part, customData.Duration or 1.0)
+				end
+				return
+			end
 			if vfxName == "MobCollectSparkle" then
 				VFXController.PlayMobCollectSparkles(customData, extraData)
 				return
@@ -1953,7 +2008,9 @@ function VFXController.Start()
 			end
 			
 			if vfxName == "Black Hole" then
-				VFXController.Play("Black Hole", nil, {Position = customData.Position, Duration = customData.Duration, Player = targetPlayer})
+				if customData and customData.Position then
+					VFXController.Play("Black Hole", nil, {Position = customData.Position, Duration = customData.Duration, Player = targetPlayer})
+				end
 				return
 			end
 			
@@ -1967,6 +2024,14 @@ function VFXController.Start()
 			if vfxName == "Wave" then
 				if not isForeign then return end -- Local handles own prediction
 				VFXController.Play("Wave", nil, customData, true)
+				return
+			end
+			
+			if vfxName == "SharkScythe" then
+				if not isForeign then return end
+				if targetPlayer and targetPlayer.Character then
+					VFXController.Play("SharkScythe", targetPlayer.Character)
+				end
 				return
 			end
 			
@@ -1991,6 +2056,7 @@ function VFXController.Start()
 			
 			-- Logic for Local Player's fish (Since they are local models)
 			if targetPlayer == Players.LocalPlayer then
+				FishController = FishController or require(script.Parent.FishController)
 				local model = FishController.GetFish(targetIndex)
 				if model then
 					VFXController.Play(vfxName, model, customData, false)
@@ -2376,6 +2442,46 @@ function VFXController.Play(vfxName, target, data, isForeign)
 			end
 		end
 		
+	elseif vfxName == "ColorBoost" then
+		local root = target.PrimaryPart or (target:IsA("Model") and target.PrimaryPart) or target:FindFirstChild("Main") or target:FindFirstChildWhichIsA("BasePart")
+		if not root then return end
+		
+		local folder = ReplicatedStorage:WaitForChild("VFX", 5)
+		local cbFolder = folder and folder:FindFirstChild("ColorBoost")
+		if cbFolder then
+			-- 1. SFX
+			local sfx = cbFolder:FindFirstChild("SFX")
+			if sfx then
+				PlaySFX(sfx, root, 2)
+			end
+			
+			-- 2. Particles
+			local attTemplate = cbFolder:FindFirstChild("ColorBoost")
+			if attTemplate then
+				local att = attTemplate:Clone()
+				att.Parent = root
+				
+				local colorValue = Color3.new(1,1,1)
+				if data == "Green" then
+					colorValue = Color3.fromRGB(85, 255, 127)
+				elseif data == "Orange" then
+					colorValue = Color3.fromRGB(255, 170, 0)
+				elseif data == "Pink" then
+					colorValue = Color3.fromRGB(255, 85, 255)
+				end
+				
+				for _, child in ipairs(att:GetDescendants()) do
+					if child:IsA("ParticleEmitter") then
+						child.Color = ColorSequence.new(colorValue)
+						local count = child:GetAttribute("EmitCount") or 15
+						child:Emit(count)
+					end
+				end
+				
+				Debris:AddItem(att, 2)
+			end
+		end
+		
 	elseif vfxName == "ChromaticBlast" then
 		local folder = ReplicatedStorage:WaitForChild("VFX", 5)
 		local cbFolder = folder and folder:FindFirstChild("ChromaticBlast")
@@ -2594,7 +2700,7 @@ function VFXController.Play(vfxName, target, data, isForeign)
 				
 				if (elapsed - lastCheck) >= checkInterval then
 					wave:SetAttribute("LastCheck", elapsed)
-					
+					FishController = FishController or require(script.Parent.FishController)
 					local fishes = FishController.GetSpawnedFish()
 					if fishes then
 						local wavePos = (wave:IsA("BasePart") and wave.Position) or 
@@ -3061,12 +3167,8 @@ function VFXController.PlayRainmakerBullet(startPos, endPos, duration)
 	
 	-- Handle Attachment vs Part
 	if bullet:IsA("Attachment") then
-		local carrier = Instance.new("Part")
+		local carrier = VFXController.GetAnchor()
 		carrier.Name = "BulletCarrier"
-		carrier.Transparency = 1
-		carrier.Size = Vector3.new(0.5,0.5,0.5)
-		carrier.CanCollide = false
-		carrier.Anchored = true
 		carrier.Position = startPos
 		carrier.Parent = workspace
 		bullet.Parent = carrier

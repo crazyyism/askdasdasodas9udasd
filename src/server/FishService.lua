@@ -165,6 +165,8 @@ function FishService.Start()
 	-- Fish DPS Loop (Server-side)
 	local fishCooldowns = {}
 	local playerLastTargets = {}
+	local fishLastTargets = {}
+	local guardianCooldowns = {}
 	local lastDpsTick = os.clock()
 	game:GetService("RunService").Heartbeat:Connect(function()
 		local now = os.clock()
@@ -177,63 +179,100 @@ function FishService.Start()
 				if not root then continue end
 				
 				-- Check for nearby mobs
-				local targetMob = nil
-				local shortestDist = 20
+				local validMobs = {}
 				
-				-- First, look for any mobs actively chasing this player
-				local chasingMobs = {}
+				-- Look for any mobs actively chasing this player
 				for _, mobData in ipairs(MobService.GetMobs()) do
-					if mobData.Mob and mobData.Mob.PrimaryPart and mobData.State == "Chasing" and mobData.Target == player then
-						table.insert(chasingMobs, mobData)
+					if mobData.Mob and mobData.Mob.PrimaryPart and (mobData.Mob:GetAttribute("Owner") == player.Name or mobData.Mob:GetAttribute("Owner") == "Global") and mobData.Target == player and mobData.State ~= "Idle" and mobData.State ~= "Returning" then
+						table.insert(validMobs, mobData.Mob)
 					end
 				end
 				
-				if #chasingMobs > 0 then
-					local closestChasingMob = nil
-					local closestChasingDist = math.huge
-					for _, mobData in ipairs(chasingMobs) do
-						local dist = (mobData.Mob.PrimaryPart.Position - root.Position).Magnitude
-						if dist < closestChasingDist then
-							closestChasingDist = dist
-							closestChasingMob = mobData.Mob
-						end
-					end
-					targetMob = closestChasingMob
-				else
-					-- Fallback to default proximity check (closest within 20 studs)
+				if #validMobs == 0 then
+					-- Fallback to default proximity check (within 20 studs)
 					for _, mobData in ipairs(MobService.GetMobs()) do
-						if mobData.Mob and mobData.Mob.PrimaryPart then
+						if mobData.Mob and mobData.Mob.PrimaryPart and (mobData.Mob:GetAttribute("Owner") == player.Name or mobData.Mob:GetAttribute("Owner") == "Global") then
 							local dist = (mobData.Mob.PrimaryPart.Position - root.Position).Magnitude
-							if dist < shortestDist then
-								shortestDist = dist
-								targetMob = mobData.Mob
+							if dist <= 20 then
+								table.insert(validMobs, mobData.Mob)
 							end
 						end
 					end
 				end
 				
-				if targetMob then
+				if #validMobs > 0 then
 					-- Calculate per-fish DPS with level difference miss chance
 					local data = PlayerData.get(player)
 					if data and data.FishSchool then
 						local playerAttack = (data.Stats and data.Stats.Attack) or 1
 						local playerFishAttack = (data.Stats and data.Stats.FishAttack) or 0
 						
-						local mobLevel = targetMob:FindFirstChild("Level") and targetMob.Level.Value or 1
 						local anyFishAttacked = false
 						
 						local userId = player.UserId
 						if not fishCooldowns[userId] then fishCooldowns[userId] = {} end
 						local pCooldowns = fishCooldowns[userId]
 						
+						local newTargets = {}
+						local targetsChanged = false
+						
 						for index, fishData in pairs(data.FishSchool) do
-							if not targetMob or not targetMob.Parent or not targetMob.PrimaryPart then
-								break
+							local numIndex = tonumber(index) or 1
+							local targetMob = validMobs[((numIndex - 1) % #validMobs) + 1]
+							newTargets[tostring(index)] = targetMob
+							
+							if not playerLastTargets[userId] or playerLastTargets[userId][tostring(index)] ~= targetMob then
+								targetsChanged = true
 							end
+							
+							if not targetMob or not targetMob.Parent or not targetMob.PrimaryPart then
+								continue
+							end
+							
+							local mobLevel = targetMob:FindFirstChild("Level") and targetMob.Level.Value or 1
+							
 							if type(fishData) == "table" and fishData.Id then
 								local fConfig = FishConfig.Fish[fishData.Id]
+								
+								-- Guardian's Protection Passive
+								if fConfig then
+									if not fishLastTargets[userId] then fishLastTargets[userId] = {} end
+									if fishLastTargets[userId][index] ~= targetMob then
+										fishLastTargets[userId][index] = targetMob
+										pCooldowns[index] = 0 -- Reset cooldown when switching targets to enforce initial delay
+									end
+									
+									local fPassives = fConfig.Passives or {}
+									if type(fPassives) ~= "table" then fPassives = {fPassives} end
+									if table.find(fPassives, "Guardian's Protection") then
+										if not guardianCooldowns[userId] then guardianCooldowns[userId] = {} end
+										
+										if fishLastTargets[userId][index] ~= targetMob then
+											fishLastTargets[userId][index] = targetMob
+											
+											local nextGuardianTime = guardianCooldowns[userId][index] or 0
+											if now >= nextGuardianTime then
+												guardianCooldowns[userId][index] = now + 30
+												
+												local fishBaseAttack = (fConfig.BaseStats and fConfig.BaseStats.Attack) or 10
+												local fishLevel = fishData.Level or 1
+												local levelDiff = mobLevel - fishLevel
+												local missChance = 0
+												if levelDiff > 0 then
+													missChance = 1 - math.pow(0.5, levelDiff)
+												end
+												
+												if math.random() >= missChance then
+													local dmg = (fishBaseAttack + playerFishAttack) * playerAttack * 10
+													local AbilityService = require(script.Parent.AbilityService)
+													AbilityService.TriggerGuardianCall(player, targetMob.PrimaryPart, dmg)
+												end
+											end
+										end
+									end
+								end
+								
 								if fConfig and fConfig.BaseStats and fConfig.BaseStats.Attack then
-									local atkSpeed = fConfig.BaseStats.AttackSpeed or 1.0
 									local nextAttack = pCooldowns[index] or 0
 									
 									if now >= nextAttack then
@@ -250,10 +289,23 @@ function FishService.Start()
 										end
 										
 										if canAttack then
-											pCooldowns[index] = now + (1.0 / atkSpeed)
-											anyFishAttacked = true
+											if nextAttack == 0 then
+												pCooldowns[index] = now + 3.0
+												canAttack = false
+											else
+												pCooldowns[index] = now + 3.0
+												anyFishAttacked = true
+											end
 									local fishBaseAttack = fConfig.BaseStats.Attack
 									local fishLevel = fishData.Level or 1
+									
+									-- The fish's raw stat based on its level
+									fishBaseAttack = fishBaseAttack * math.pow(1.1, math.max(0, fishLevel - 1))
+									
+									-- If fish is higher level than mob, deal exponentially more damage
+									if fishLevel > mobLevel then
+										fishBaseAttack = fishBaseAttack * math.pow(1.1, fishLevel - mobLevel)
+									end
 									
 									local levelDiff = mobLevel - fishLevel
 									local missChance = 0
@@ -262,7 +314,7 @@ function FishService.Start()
 									end
 									
 									if math.random() < missChance then
-										MobService.DamageMob(targetMob, 0, false, true, player)
+										MobService.DamageMob(targetMob, 0, false, true, player, false)
 									else
 										local rawDamage = (fishBaseAttack + playerFishAttack) * playerAttack
 										
@@ -280,7 +332,7 @@ function FishService.Start()
 											rawDamage = rawDamage * critPower
 										end
 										
-										MobService.DamageMob(targetMob, rawDamage, isCrit, false, player)
+										MobService.DamageMob(targetMob, rawDamage, isCrit, false, player, false)
 										end
 									end
 									end
@@ -295,10 +347,10 @@ function FishService.Start()
 							end
 						end
 						
-						if playerLastTargets[userId] ~= targetMob then
-							playerLastTargets[userId] = targetMob
+						if targetsChanged then
+							playerLastTargets[userId] = newTargets
 							if FishStateRelay then
-								FishStateRelay:FireClient(player, {OrbitTarget = targetMob})
+								FishStateRelay:FireClient(player, {OrbitTargets = newTargets})
 							end
 						end
 					end
@@ -309,7 +361,7 @@ function FishService.Start()
 						if playerLastTargets[player.UserId] ~= nil then
 							playerLastTargets[player.UserId] = nil
 							if FishStateRelay then
-								FishStateRelay:FireClient(player, {OrbitTarget = nil})
+								FishStateRelay:FireClient(player, {OrbitTargets = nil})
 							end
 						end
 					end

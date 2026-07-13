@@ -19,13 +19,17 @@ return function(context)
 	local color = (vfxOverride and vfxOverride.Color) or Color3.new(1,1,1)
 	VFXReplication:FireAllClients("ChromaticBlast", player, fishIndex, color, {Position = position, ForceOverride = (vfxOverride ~= nil)})
 	local count = abilityConfig.Count or 5
+	local spawnRate = abilityConfig.SpawnRate or 3.0
+	local shrinkTime = abilityConfig.ShrinkTime or 2.5
+	local minigameDuration = abilityConfig.MinigameDuration or ((count * spawnRate) + shrinkTime + 2)
+	
 	local uid = player.UserId
 	AbilityService.ExpectedRhythmHits[uid] = (AbilityService.ExpectedRhythmHits[uid] or 0) + count
 	
-	RhythmGameEvent:FireClient(player, count)
+	RhythmGameEvent:FireClient(player, count, spawnRate, shrinkTime)
 	
 	-- Timeout to clear expected hits if client never finishes minigame
-	task.delay(10, function()
+	task.delay(minigameDuration, function()
 		if AbilityService.ExpectedRhythmHits[uid] then
 			AbilityService.ExpectedRhythmHits[uid] = math.max(0, AbilityService.ExpectedRhythmHits[uid] - count)
 		end
